@@ -1,5 +1,6 @@
--- Reference DDL only — run this yourself in the Supabase SQL Editor.
--- The app does not apply this file; it expects these tables to exist when SUPABASE_* is set.
+-- Reply Handler dedicated Supabase project — NOT the CRM database.
+-- Apply here after `supabase link` to your **new** project (see supabase/README.md).
+-- Keeps SMS prospects/events separate until you integrate with CRM (sync/API layer).
 
 create extension if not exists pgcrypto;
 
