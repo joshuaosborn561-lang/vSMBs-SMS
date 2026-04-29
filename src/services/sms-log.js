@@ -1,6 +1,49 @@
 const db = require('../db');
 const { sendSms } = require('./sms-gateway');
 
+/** Serialized sends per client + last successful SMS time for carrier-safe spacing */
+const clientOutboundTail = new Map();
+const lastClientOutboundSentAt = new Map();
+const minGapCache = new Map();
+
+async function getMinGapMsForClient(clientId) {
+  const now = Date.now();
+  const cached = minGapCache.get(clientId);
+  if (cached && now - cached.at < 30000) return cached.ms;
+
+  const { rows: [row] } = await db.query(
+    `SELECT COALESCE(sms_min_gap_between_texts_ms, 0)::int AS g FROM clients WHERE id = $1`,
+    [clientId]
+  );
+  const ms = Math.max(0, Number(row?.g) || 0);
+  minGapCache.set(clientId, { ms, at: now });
+  return ms;
+}
+
+function invalidateClientMinGapCache(clientId) {
+  minGapCache.delete(clientId);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitCarrierGapIfNeeded(clientId) {
+  const gapMs = await getMinGapMsForClient(clientId);
+  if (!gapMs) return;
+  const last = lastClientOutboundSentAt.get(clientId) || 0;
+  const elapsed = Date.now() - last;
+  const wait = gapMs - elapsed;
+  if (wait > 0) await sleep(wait);
+}
+
+function queueClientOutbound(clientId, fn) {
+  const prev = clientOutboundTail.get(clientId) || Promise.resolve();
+  const next = prev.catch(() => {}).then(() => fn());
+  clientOutboundTail.set(clientId, next.catch(() => {}));
+  return next;
+}
+
 async function lastOutboundSentAt(clientId, leadPhone) {
   const { rows } = await db.query(
     `SELECT sent_at FROM sms_message_log
@@ -93,24 +136,28 @@ async function logOutboundFailed({ logId, errorMessage }) {
   );
 }
 
-/** Send via SMSMobileAPI and finalize log row (or insert if no scheduledLogId). */
+/** Send via SMSMobileAPI and finalize log row (or insert if no scheduledLogId). Carrier gap enforced per client (serialized). */
 async function sendSmsLogged({ clientId, leadPhone, body, templateKey, variables, scheduledLogId }) {
-  try {
-    const r = await sendSms({ to: leadPhone, body });
-    await logOutboundSent({
-      clientId,
-      leadPhone,
-      body,
-      templateKey,
-      variables,
-      providerMessageId: r.id,
-      logId: scheduledLogId,
-    });
-    return r;
-  } catch (e) {
-    await logOutboundFailed({ logId: scheduledLogId, errorMessage: e.message });
-    throw e;
-  }
+  return queueClientOutbound(clientId, async () => {
+    try {
+      await waitCarrierGapIfNeeded(clientId);
+      const r = await sendSms({ to: leadPhone, body });
+      lastClientOutboundSentAt.set(clientId, Date.now());
+      await logOutboundSent({
+        clientId,
+        leadPhone,
+        body,
+        templateKey,
+        variables,
+        providerMessageId: r.id,
+        logId: scheduledLogId,
+      });
+      return r;
+    } catch (e) {
+      await logOutboundFailed({ logId: scheduledLogId, errorMessage: e.message });
+      throw e;
+    }
+  });
 }
 
 async function listLog(clientId, limit = 100) {
@@ -133,4 +180,5 @@ module.exports = {
   sendSmsLogged,
   listLog,
   computeDelayMsSinceLastOutbound,
+  invalidateClientMinGapCache,
 };

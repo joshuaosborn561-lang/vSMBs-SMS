@@ -826,6 +826,12 @@
       </div>
 
       <div class="form-group">
+        <label>Minimum gap between outbound texts (milliseconds)</label>
+        <input type="number" id="f_sms_min_gap_between_texts_ms" placeholder="0" min="0" step="500" value="0">
+        <div class="hint">Applied to <strong>every</strong> outbound SMS for this client (sequences, replies, tests) so sends are spaced for carrier compliance. Example: 3000 = at least 3 seconds between any two texts from your number. Campaign sequences also have their own schedule/gaps.</div>
+      </div>
+
+      <div class="form-group">
         <label>Voice Prompt</label>
         <textarea id="f_voice_prompt" placeholder="Direct, no-nonsense tone. Speak like a fellow practitioner, not a salesperson. Never use filler phrases. Keep replies to 2-3 sentences."></textarea>
         <div class="hint">Describes how AI-drafted replies should sound for this client.</div>
@@ -1131,7 +1137,7 @@ function openDetail(id) {
 
     <div class="detail-section">
       <h4>SMS cockpit</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Preview messages with sheet variables, see send gaps, and test-send (uses <code>SMSMOBILEAPI_KEY</code> on the server).</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Preview messages with sheet variables, see send gaps, and test-send (uses <code>SMSMOBILEAPI_KEY</code> on the server). Set <strong>Minimum gap between outbound texts</strong> in Edit client to throttle all SMS from this client for carrier safety.</p>
       <div class="sms-cockpit">
         <div class="sms-cockpit-grid">
           <div>
@@ -1360,6 +1366,7 @@ function openEditFromDetail() {
   document.getElementById('f_google_sheet_id').value = c.google_sheet_id || '';
   document.getElementById('f_sms_free_site_body').value = c.sms_free_site_body || '';
   document.getElementById('f_sms_free_site_delay_ms').value = (c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000);
+  document.getElementById('f_sms_min_gap_between_texts_ms').value = (c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 0);
 
   openModal('formModal');
 }
@@ -1378,6 +1385,7 @@ async function submitForm() {
     google_sheet_id: document.getElementById('f_google_sheet_id').value.trim() || null,
     sms_free_site_body: document.getElementById('f_sms_free_site_body').value.trim() || null,
     sms_free_site_delay_ms: parseInt(document.getElementById('f_sms_free_site_delay_ms').value, 10) || 20000,
+    sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById('f_sms_min_gap_between_texts_ms').value, 10) || 0),
   };
 
   if (!data.name || !data.slack_bot_token || !data.slack_channel_id) {
@@ -1424,6 +1432,7 @@ function clearForm() {
     document.getElementById(id).value = '';
   });
   document.getElementById('f_sms_free_site_delay_ms').value = '20000';
+  document.getElementById('f_sms_min_gap_between_texts_ms').value = '0';
 }
 
 function formatDelayMs(ms) {

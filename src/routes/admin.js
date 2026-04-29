@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const db = require('../db');
+const smsLog = require('../services/sms-log');
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.post('/admin/clients', async (req, res) => {
       google_sheet_id, sheet_tab_prospects, sheet_tab_dnc, sheet_tab_settings,
       sheet_tab_email_log, settings_last_email_check_cell,
       sms_free_site_body, sms_free_site_delay_ms,
+      sms_min_gap_between_texts_ms,
     } = req.body;
 
     if (!name || !slack_bot_token || !slack_channel_id) {
@@ -39,9 +41,9 @@ router.post('/admin/clients', async (req, res) => {
         booking_link, calendly_personal_access_token, voice_prompt,
         google_sheet_id, sheet_tab_prospects, sheet_tab_dnc, sheet_tab_settings,
         sheet_tab_email_log, settings_last_email_check_cell,
-        sms_free_site_body, sms_free_site_delay_ms
+        sms_free_site_body, sms_free_site_delay_ms, sms_min_gap_between_texts_ms
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
       [
         name,
         smartlead_api_key || null,
@@ -61,6 +63,9 @@ router.post('/admin/clients', async (req, res) => {
         sms_free_site_delay_ms != null && sms_free_site_delay_ms !== ''
           ? Number(sms_free_site_delay_ms)
           : 20000,
+        sms_min_gap_between_texts_ms != null && sms_min_gap_between_texts_ms !== ''
+          ? Math.max(0, Number(sms_min_gap_between_texts_ms))
+          : 0,
       ]
     );
 
@@ -95,6 +100,7 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
       'sheet_tab_email_log', 'settings_last_email_check_cell',
       'gmail_watcher_started_at',
       'sms_free_site_body', 'sms_free_site_delay_ms',
+      'sms_min_gap_between_texts_ms',
     ];
 
     const updates = [];
@@ -102,11 +108,14 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
     let idx = 1;
 
     for (const [key, value] of Object.entries(fields)) {
-      if (allowedFields.includes(key)) {
-        updates.push(`${key} = $${idx}`);
-        values.push(value);
-        idx++;
+      if (!allowedFields.includes(key)) continue;
+      let v = value;
+      if (key === 'sms_min_gap_between_texts_ms') {
+        v = Math.max(0, Number(v) || 0);
       }
+      updates.push(`${key} = $${idx}`);
+      values.push(v);
+      idx++;
     }
 
     if (updates.length === 0) {
@@ -125,6 +134,7 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
       return res.status(404).json({ error: 'Client not found' });
     }
 
+    smsLog.invalidateClientMinGapCache(clientId);
     console.log('[Admin] Client updated', { id: client.id, name: client.name });
     res.json(formatClient(client));
   } catch (err) {
