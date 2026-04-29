@@ -3,7 +3,7 @@ const { getSupabase } = require('./supabase-client');
 async function listCampaignEvents(clientId, limit = 100) {
   const sb = getSupabase();
   if (!sb) return [];
-  const lim = Math.min(500, Math.max(1, limit));
+  const lim = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
   const { data, error } = await sb
     .from('campaign_event_log')
     .select('*')
@@ -15,7 +15,7 @@ async function listCampaignEvents(clientId, limit = 100) {
 }
 
 /**
- * Audit trail in Supabase table campaign_event_log (optional — no-op if Supabase unset).
+ * Audit trail in Supabase campaign_event_log (no-op if Supabase env unset).
  */
 async function logCampaignEvent(clientId, { campaignId, enrollmentId, jobId, eventType, payload }) {
   const sb = getSupabase();
@@ -30,7 +30,7 @@ async function logCampaignEvent(clientId, { campaignId, enrollmentId, jobId, eve
       payload: payload && typeof payload === 'object' ? payload : {},
     });
   } catch (e) {
-    console.warn('[CampaignLog] Supabase insert failed', e.message);
+    console.warn('[CampaignLog]', e.message);
   }
 }
 

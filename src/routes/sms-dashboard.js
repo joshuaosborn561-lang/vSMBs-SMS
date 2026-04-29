@@ -32,7 +32,7 @@ router.get('/admin/sms/log/:clientId', async (req, res) => {
 
 /**
  * GET /admin/sms/preview/:clientId?phone=+1...
- * Variables from Supabase sms_prospect (requires SUPABASE_* env).
+ * Variables from sms_prospect in Supabase (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY).
  */
 router.get('/admin/sms/preview/:clientId', async (req, res) => {
   try {

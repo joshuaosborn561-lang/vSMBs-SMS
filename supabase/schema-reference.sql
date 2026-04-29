@@ -1,5 +1,5 @@
--- Run in Supabase SQL Editor or via Supabase CLI linked project.
--- Prospects + DNC + campaign audit log + Gmail inbox log (replaces Google Sheets / optional Postgres copies).
+-- Reference DDL only — run this yourself in the Supabase SQL Editor.
+-- The app does not apply this file; it expects these tables to exist when SUPABASE_* is set.
 
 create extension if not exists pgcrypto;
 
@@ -37,8 +37,8 @@ create table if not exists campaign_event_log (
 );
 
 create index if not exists idx_campaign_event_client on campaign_event_log (client_id, created_at desc);
-create index if not exists idx_campaign_event_campaign on campaign_event_log (campaign_id, created_at desc);
 
+-- Gmail mirror (code uses table name gmail_inbound_email)
 create table if not exists gmail_inbound_email (
   id uuid primary key default gen_random_uuid(),
   client_id uuid not null,
@@ -54,7 +54,3 @@ create table if not exists gmail_inbound_email (
 );
 
 create index if not exists idx_gmail_inbound_client on gmail_inbound_email (client_id, created_at desc);
-
-comment on table sms_prospect is 'SMS leads and DNC — managed by ReplyHandler via service role';
-comment on table campaign_event_log is 'Campaign enroll / send / failure audit trail';
-comment on table gmail_inbound_email is 'Gmail watcher rows mirrored from polling';

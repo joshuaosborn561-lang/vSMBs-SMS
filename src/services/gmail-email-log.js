@@ -1,5 +1,6 @@
 const { getSupabase } = require('./supabase-client');
 
+/** Table: gmail_inbound_email (create manually in Supabase — see supabase/schema-reference.sql) */
 async function insertInboundEmail(clientId, row) {
   const sb = getSupabase();
   if (!sb) return;

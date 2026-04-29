@@ -5,7 +5,7 @@ function requireSupabase() {
   const sb = getSupabase();
   if (!sb) {
     throw new Error(
-      'Supabase is required for prospects/DNC: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (create tables from supabase/migrations/)'
+      'Supabase is required for prospects/DNC: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'
     );
   }
   return sb;
@@ -124,10 +124,7 @@ async function upsertProspect(clientId, fields) {
     intent: fields.intent !== undefined ? fields.intent : existingRow?.intent ?? null,
     site_url: fields.site_url !== undefined ? fields.site_url : existingRow?.site_url ?? null,
     customer_status: fields.customer_status !== undefined ? fields.customer_status : existingRow?.customer_status ?? null,
-    is_dnc:
-      fields.is_dnc !== undefined
-        ? !!fields.is_dnc
-        : !!existingRow?.is_dnc,
+    is_dnc: fields.is_dnc !== undefined ? !!fields.is_dnc : !!existingRow?.is_dnc,
     extra: mergedExtra,
     updated_at: new Date().toISOString(),
   };

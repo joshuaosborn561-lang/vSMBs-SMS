@@ -3,7 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 let singleton;
 
 /**
- * Server-side Supabase with service role (bypasses RLS). Used for prospects, DNC, campaign logs.
+ * Server-side Supabase (service role). Prospects, campaign_event_log, gmail_inbound_email.
  * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
 function getSupabase() {
