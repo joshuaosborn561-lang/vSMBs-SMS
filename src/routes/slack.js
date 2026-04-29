@@ -3,7 +3,8 @@ const db = require('../db');
 const slackService = require('../services/slack');
 const slackVerify = require('../middleware/slackVerify');
 const { sendReplyToPlatform, maybeBookMeetingAfterSend } = require('../services/reply-send');
-const sheets = require('../services/sheets');
+const prospects = require('../services/prospects');
+const gmailEmailLog = require('../services/gmail-email-log');
 
 const router = Router();
 
@@ -217,26 +218,15 @@ async function handleSmsEscalationDnc(valueJson, interaction) {
   const { rows: [client] } = await db.query('SELECT * FROM clients WHERE id = $1', [reply.client_id]);
   const p = phone || reply.lead_id;
 
-  if (client.google_sheet_id) {
-    try {
-      await sheets.appendDnc(client.google_sheet_id, client.sheet_tab_dnc || 'DNC', {
-        phone: p,
-        reason: 'slack_escalation_dnc',
-      });
-      const prospectTab = client.sheet_tab_prospects || 'Prospects';
-      const found = await sheets.findProspectRow(client.google_sheet_id, prospectTab, p);
-      if (found.row) {
-        await sheets.updateProspectByHeaders(
-          client.google_sheet_id,
-          prospectTab,
-          found.row,
-          found.headers,
-          { dnc: 'yes', customer_status: 'dnc', intent: 'human_dnc' }
-        );
-      }
-    } catch (e) {
-      console.error('[Slack] DNC sheet update failed', e.message);
-    }
+  try {
+    await prospects.appendDnc(client.id, p, 'slack_escalation_dnc');
+    await prospects.patchProspectFields(client.id, p, {
+      dnc: true,
+      customer_status: 'dnc',
+      intent: 'human_dnc',
+    });
+  } catch (e) {
+    console.error('[Slack] DNC prospect update failed', e.message);
   }
 
   await slackService.updateMessage(
@@ -256,22 +246,12 @@ async function handleSmsFollowupSendSite(valueJson, interaction) {
   const { rows: [client] } = await db.query('SELECT * FROM clients WHERE id = $1', [reply.client_id]);
   const p = phone || reply.lead_id;
 
-  if (client.google_sheet_id) {
-    try {
-      const prospectTab = client.sheet_tab_prospects || 'Prospects';
-      const found = await sheets.findProspectRow(client.google_sheet_id, prospectTab, p);
-      if (found.row) {
-        await sheets.updateProspectByHeaders(
-          client.google_sheet_id,
-          prospectTab,
-          found.row,
-          found.headers,
-          { customer_status: 'send_site_acknowledged' }
-        );
-      }
-    } catch (e) {
-      console.error('[Slack] Sheet update failed', e.message);
-    }
+  try {
+    await prospects.patchProspectFields(client.id, p, {
+      customer_status: 'send_site_acknowledged',
+    });
+  } catch (e) {
+    console.error('[Slack] Prospect update failed', e.message);
   }
 
   await slackService.updateMessage(
@@ -291,26 +271,15 @@ async function handleSmsFollowupDnc(valueJson, interaction) {
   const { rows: [client] } = await db.query('SELECT * FROM clients WHERE id = $1', [reply.client_id]);
   const p = metaPhone || reply.lead_id;
 
-  if (client.google_sheet_id) {
-    try {
-      await sheets.appendDnc(client.google_sheet_id, client.sheet_tab_dnc || 'DNC', {
-        phone: p,
-        reason: 'slack_followup_dnc',
-      });
-      const prospectTab = client.sheet_tab_prospects || 'Prospects';
-      const found = await sheets.findProspectRow(client.google_sheet_id, prospectTab, p);
-      if (found.row) {
-        await sheets.updateProspectByHeaders(
-          client.google_sheet_id,
-          prospectTab,
-          found.row,
-          found.headers,
-          { dnc: 'yes', customer_status: 'dnc', intent: 'human_dnc' }
-        );
-      }
-    } catch (e) {
-      console.error('[Slack] Follow-up DNC sheet failed', e.message);
-    }
+  try {
+    await prospects.appendDnc(client.id, p, 'slack_followup_dnc');
+    await prospects.patchProspectFields(client.id, p, {
+      dnc: true,
+      customer_status: 'dnc',
+      intent: 'human_dnc',
+    });
+  } catch (e) {
+    console.error('[Slack] Follow-up DNC prospect failed', e.message);
   }
 
   await slackService.updateMessage(
@@ -332,17 +301,8 @@ async function handleGmailMarkDone(valueJson, interaction) {
   );
   if (!notif) return;
 
-  const { rows: [client] } = await db.query('SELECT * FROM clients WHERE id = $1', [notif.client_id]);
-  if (client.google_sheet_id && notif.sheet_log_row) {
-    try {
-      await sheets.markEmailLogHandled(
-        client.google_sheet_id,
-        client.sheet_tab_email_log || 'EmailLog',
-        notif.sheet_log_row
-      );
-    } catch (e) {
-      console.error('[Slack] Email log sheet update failed', e.message);
-    }
+  if (notif.gmail_message_id) {
+    await gmailEmailLog.markHandled(notif.client_id, notif.gmail_message_id);
   }
 
   await slackService.updateMessage(
@@ -386,22 +346,13 @@ async function handleSmsReplyModalSubmit(interaction) {
       ['sent', messageText, replyId]
     );
 
-    if (client.google_sheet_id) {
-      try {
-        const prospectTab = client.sheet_tab_prospects || 'Prospects';
-        const found = await sheets.findProspectRow(client.google_sheet_id, prospectTab, phone || reply.lead_id);
-        if (found.row) {
-          await sheets.updateProspectByHeaders(
-            client.google_sheet_id,
-            prospectTab,
-            found.row,
-            found.headers,
-            { reply: messageText, customer_status: 'manual_sms_sent' }
-          );
-        }
-      } catch (e) {
-        console.error('[Slack] Sheet log failed after SMS', e.message);
-      }
+    try {
+      await prospects.patchProspectFields(client.id, phone || reply.lead_id, {
+        reply: messageText,
+        customer_status: 'manual_sms_sent',
+      });
+    } catch (e) {
+      console.error('[Slack] Prospect log failed after SMS', e.message);
     }
 
     if (channelId && messageTs) {

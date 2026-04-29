@@ -1,5 +1,6 @@
 const db = require('../db');
 const sheets = require('../services/sheets');
+const prospects = require('../services/prospects');
 const { renderSmsTemplate } = require('../utils/sms-template');
 const {
   nextAllowedSendAt,
@@ -7,23 +8,12 @@ const {
   applyMinGap,
 } = require('../utils/sms-schedule');
 const smsLog = require('./sms-log');
+const { logCampaignEvent } = require('./campaign-log');
 
 const TEMPLATE_KEYS = { 1: 'campaign_step_1', 2: 'campaign_step_2', 3: 'campaign_step_3', 4: 'campaign_step_4', 5: 'campaign_step_5' };
 
 function templateKeyForStep(stepOrder) {
   return TEMPLATE_KEYS[stepOrder] || `campaign_step_${stepOrder}`;
-}
-
-/** Row map from sheet headers + phone → variables for {{placeholders}} */
-function rowToVariables(headers, rowData, phone) {
-  const vars = { phone: String(phone || '').trim() };
-  if (!headers || !rowData) return vars;
-  for (const [key, colIdx] of Object.entries(headers)) {
-    if (colIdx === undefined) continue;
-    const cell = rowData[colIdx];
-    if (cell != null && cell !== '') vars[key] = String(cell).trim();
-  }
-  return vars;
 }
 
 function campaignIsRunnable(c) {
@@ -184,7 +174,6 @@ async function previewSteps(clientId, campaignId, phones) {
   const camp = await getCampaignWithSteps(campaignId, clientId);
   if (!camp || !camp.steps?.length) throw new Error('Campaign or steps not found');
 
-  const prospectTab = client.sheet_tab_prospects || 'Prospects';
   const list = Array.isArray(phones) ? phones : [];
   const results = [];
 
@@ -192,22 +181,9 @@ async function previewSteps(clientId, campaignId, phones) {
     const phone = String(rawPhone || '').trim();
     if (!phone) continue;
 
-    let variables = { phone };
-    let matched = false;
-    let sheetRow = null;
-
-    if (client.google_sheet_id) {
-      const { row, headers, rowData } = await sheets.findProspectRow(
-        client.google_sheet_id,
-        prospectTab,
-        phone
-      );
-      matched = !!row;
-      sheetRow = row;
-      variables = mergeVariables(rowToVariables(headers, rowData, phone), await getStagedVariables(clientId, phone));
-    } else {
-      variables = mergeVariables({ phone }, await getStagedVariables(clientId, phone));
-    }
+    const { row: pRow } = await prospects.findProspectByPhone(clientId, phone);
+    const baseVars = pRow ? prospects.prospectRowToVariables(pRow) : { phone };
+    const variables = mergeVariables(baseVars, await getStagedVariables(clientId, phone));
 
     const stepsOut = camp.steps.map((st) => ({
       sort_order: st.sort_order,
@@ -217,8 +193,8 @@ async function previewSteps(clientId, campaignId, phones) {
     }));
     results.push({
       phone,
-      matched,
-      sheet_row: sheetRow,
+      matched: !!pRow,
+      prospect_id: pRow?.id || null,
       variables,
       steps: stepsOut,
     });
@@ -276,11 +252,7 @@ async function enrollLeads(clientId, campaignId, phones, { cancelPendingJobs = t
   if (!camp || !camp.steps?.length) throw new Error('Campaign or steps not found');
   if (!campaignIsRunnable(camp)) throw new Error('Campaign is not active');
 
-  const prospectTab = client.sheet_tab_prospects || 'Prospects';
-  const dncTab = client.sheet_tab_dnc || 'DNC';
-  const dncKeys = client.google_sheet_id
-    ? await sheets.loadDncPhoneKeys(client.google_sheet_id, dncTab)
-    : new Set();
+  const dncKeys = await prospects.loadDncPhoneKeys(clientId);
 
   const list = Array.isArray(phones) ? phones : [];
   const summary = {
@@ -318,17 +290,9 @@ async function enrollLeads(clientId, campaignId, phones, { cancelPendingJobs = t
     }
 
     try {
-      let variables = { phone };
-      if (client.google_sheet_id) {
-        const { row, headers, rowData } = await sheets.findProspectRow(
-          client.google_sheet_id,
-          prospectTab,
-          phone
-        );
-        variables = mergeVariables(rowToVariables(headers, rowData, phone), await getStagedVariables(clientId, phone));
-      } else {
-        variables = mergeVariables({ phone }, await getStagedVariables(clientId, phone));
-      }
+      const { row: pRow } = await prospects.findProspectByPhone(clientId, phone);
+      const baseVars = pRow ? prospects.prospectRowToVariables(pRow) : { phone };
+      const variables = mergeVariables(baseVars, await getStagedVariables(clientId, phone));
 
       await db.query('BEGIN');
       try {
@@ -376,10 +340,11 @@ async function enrollLeads(clientId, campaignId, phones, { cancelPendingJobs = t
         };
         let scheduledAt = nextAllowedSendAt(camp, new Date());
 
-        await db.query(
+        const { rows: [jobIns] } = await db.query(
           `INSERT INTO sms_campaign_job_queue
             (enrollment_id, campaign_id, client_id, lead_phone, step_order, payload, scheduled_at, status)
-           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, 'pending')`,
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, 'pending')
+           RETURNING id`,
           [
             enrollmentId,
             campaignId,
@@ -397,6 +362,17 @@ async function enrollLeads(clientId, campaignId, phones, { cancelPendingJobs = t
 
         await db.query('COMMIT');
         summary.enrolled += 1;
+        await logCampaignEvent(clientId, {
+          campaignId,
+          enrollmentId,
+          jobId: jobIns?.id,
+          eventType: 'enroll_success',
+          payload: {
+            phone,
+            step_order: firstStep.sort_order,
+            scheduled_at: scheduledAt instanceof Date ? scheduledAt.toISOString() : String(scheduledAt),
+          },
+        });
       } catch (e) {
         await db.query('ROLLBACK');
         summary.errors.push({ phone, error: e.message });
@@ -459,6 +435,11 @@ async function handleInboundBranch(clientId, phone, intent) {
   );
 
   const sum = await enrollLeads(clientId, rule.target_campaign_id, [phone], { cancelPendingJobs: true });
+  await logCampaignEvent(clientId, {
+    campaignId: rule.source_campaign_id,
+    eventType: 'branch_enroll',
+    payload: { intent, target_campaign_id: rule.target_campaign_id, phone, enroll: sum },
+  });
   return { branched: true, target_campaign_id: rule.target_campaign_id, enroll: sum };
 }
 
@@ -504,32 +485,22 @@ async function deleteTransition(clientId, sourceCampaignId, triggerIntent) {
 
 async function importStagedLeads(clientId, rows, sourceLabel) {
   await assertClient(clientId);
-  let imported = 0;
-  for (const row of rows) {
-    const phone = String(row.phone || '').trim();
-    if (!phone) continue;
-    const { phone: _p, ...rest } = row;
-    await db.query(
-      `INSERT INTO sms_campaign_staged_lead (client_id, phone, variables, source_label)
-       VALUES ($1, $2, $3::jsonb, $4)
-       ON CONFLICT (client_id, phone)
-       DO UPDATE SET variables = EXCLUDED.variables, source_label = EXCLUDED.source_label, updated_at = now()`,
-      [clientId, phone, JSON.stringify(rest), sourceLabel || null]
-    );
-    imported += 1;
-  }
+  const enriched = sourceLabel
+    ? rows.map((r) => ({ ...r, upload_source: sourceLabel }))
+    : rows;
+  const imported = await prospects.upsertManyFromCsvRows(clientId, enriched);
   return { imported };
 }
 
 async function listStagedLeads(clientId, limit = 500) {
-  await assertClient(clientId);
-  const lim = Math.min(2000, Math.max(1, limit));
-  const { rows } = await db.query(
-    `SELECT phone, variables, source_label, created_at FROM sms_campaign_staged_lead
-     WHERE client_id = $1 ORDER BY updated_at DESC LIMIT $2`,
-    [clientId, lim]
-  );
-  return rows;
+  const rows = await prospects.listProspects(clientId, limit);
+  return rows.map((r) => ({
+    phone: r.phone_e164,
+    variables: prospects.prospectRowToVariables(r),
+    source_label: (r.extra && r.extra.upload_source) || null,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  }));
 }
 
 async function listEnrollments(clientId, campaignId, limit = 200) {
@@ -652,6 +623,18 @@ async function processDueJobs(batchLimit = 25) {
         [job.id]
       );
 
+      await logCampaignEvent(job.client_id, {
+        campaignId: job.campaign_id,
+        enrollmentId: job.enrollment_id,
+        jobId: job.id,
+        eventType: 'send_success',
+        payload: {
+          lead_phone: job.lead_phone,
+          step_order: job.step_order,
+          template_key: templateKey,
+        },
+      });
+
       if (camp.max_sends_per_day != null) {
         await incrementDailySend(job.campaign_id);
       }
@@ -708,6 +691,13 @@ async function processDueJobs(batchLimit = 25) {
         `UPDATE sms_campaign_enrollment SET status = 'failed', last_error = $2, updated_at = now() WHERE id = $1`,
         [job.enrollment_id, msg]
       );
+      await logCampaignEvent(job.client_id, {
+        campaignId: job.campaign_id,
+        enrollmentId: job.enrollment_id,
+        jobId: job.id,
+        eventType: 'send_failed',
+        payload: { lead_phone: job.lead_phone, step_order: job.step_order, error: msg },
+      });
       results.failed += 1;
     }
   }
@@ -726,7 +716,6 @@ module.exports = {
   listEnrollments,
   listJobs,
   processDueJobs,
-  rowToVariables,
   templateKeyForStep,
   campaignIsRunnable,
   cancelJobsForPhone,

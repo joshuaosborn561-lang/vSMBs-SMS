@@ -1,0 +1,1 @@
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS gmail_last_checked_at TIMESTAMPTZ;

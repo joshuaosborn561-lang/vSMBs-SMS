@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db');
 const sheets = require('../services/sheets');
+const prospects = require('../services/prospects');
 const {
   classifySmsIntent,
   classifyAffirmative,
@@ -23,20 +24,10 @@ function canonicalPhone(rawPhone, fallbackKeys) {
   return '';
 }
 
-function getCell(headers, row, ...names) {
-  for (const n of names) {
-    const k = n.toLowerCase().replace(/\s+/g, '_');
-    const idx = headers[k];
-    if (idx !== undefined && row[idx] != null) return String(row[idx]).trim();
-  }
-  return '';
-}
-
 router.post('/webhook/sms/:clientId', async (req, res) => {
   const { clientId } = req.params;
   const payload = req.body || {};
 
-  // SMSMobileAPI inbound: number, message, time_received, guid
   const rawPhone =
     payload.number || payload.from || payload.phone || payload.From || payload.sender || payload.msisdn;
   const inboundMessage =
@@ -54,31 +45,18 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       return res.status(200).json({ ok: true, skipped: true });
     }
 
-    const prospectTab = client.sheet_tab_prospects || 'Prospects';
-    const dncTab = client.sheet_tab_dnc || 'DNC';
+    const sheetKeys = sheets.phoneMatchKeys(rawPhone);
 
-    const dncKeys = client.google_sheet_id
-      ? await sheets.loadDncPhoneKeys(client.google_sheet_id, dncTab)
-      : new Set();
-    const keys = sheets.phoneMatchKeys(rawPhone);
-    if (keys.some((k) => dncKeys.has(k))) {
+    if (await prospects.isPhoneOnDnc(clientId, rawPhone)) {
       console.log('[Webhook SMS] Number on DNC list — ignoring', { rawPhone });
       return res.status(200).json({ ok: true, skipped: true, reason: 'dnc' });
     }
 
-    let sheetRow = null;
-    let headers = {};
-    let rowData = null;
-    if (client.google_sheet_id) {
-      const found = await sheets.findProspectRow(client.google_sheet_id, prospectTab, rawPhone);
-      sheetRow = found.row;
-      headers = found.headers || {};
-      rowData = found.rowData;
-    }
-
-    const businessName = rowData ? getCell(headers, rowData, 'business_name', 'business name') : '';
-    const vertical = rowData ? getCell(headers, rowData, 'vertical') : '';
-    const city = rowData ? getCell(headers, rowData, 'city') : '';
+    const { row: prospectRow } = await prospects.findProspectByPhone(clientId, rawPhone);
+    const vars = prospectRow ? prospects.prospectRowToVariables(prospectRow) : {};
+    const businessName = vars.business_name || '';
+    const vertical = vars.vertical || '';
+    const city = vars.city || '';
 
     const ctxLines = [
       businessName && `Business: ${businessName}`,
@@ -86,7 +64,7 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       city && `City: ${city}`,
     ];
 
-    const phoneDisplay = canonicalPhone(rawPhone, keys);
+    const phoneDisplay = canonicalPhone(rawPhone, sheetKeys);
 
     let inboundLogId;
     try {
@@ -120,26 +98,13 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
 
     if (stopDetected) {
       await smsCampaign.cancelJobsForPhone(clientId, phoneDisplay, 'stop_or_unsubscribe');
-      if (client.google_sheet_id) {
-        await sheets.appendDnc(client.google_sheet_id, dncTab, {
-          phone: phoneDisplay,
-          reason: 'stop_unsubscribe_auto',
-        });
-        if (sheetRow) {
-          await sheets.updateProspectByHeaders(
-            client.google_sheet_id,
-            prospectTab,
-            sheetRow,
-            headers,
-            {
-              reply: inboundMessage,
-              intent: 'stop',
-              customer_status: 'dnc',
-              dnc: 'yes',
-            }
-          );
-        }
-      }
+      await prospects.appendDnc(clientId, phoneDisplay, 'stop_unsubscribe_auto');
+      await prospects.patchProspectFields(clientId, phoneDisplay, {
+        reply: inboundMessage,
+        intent: 'stop',
+        customer_status: 'dnc',
+        dnc: true,
+      });
       return res.status(200).json({
         ok: true,
         path: 'auto_dnc_stop',
@@ -147,7 +112,6 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       });
     }
 
-    // ─── Stage: awaiting ack after free-site prompt ───────────────────
     const { rows: [convState] } = await db.query(
       `SELECT * FROM sms_conversation_state WHERE client_id = $1 AND phone_e164 = $2`,
       [clientId, phoneDisplay]
@@ -177,15 +141,10 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
           ]
         );
 
-        if (sheetRow) {
-          await sheets.updateProspectByHeaders(
-            client.google_sheet_id,
-            prospectTab,
-            sheetRow,
-            headers,
-            { reply: inboundMessage, intent: 'affirmative_free_site' }
-          );
-        }
+        await prospects.patchProspectFields(clientId, phoneDisplay, {
+          reply: inboundMessage,
+          intent: 'affirmative_free_site',
+        });
 
         const slackResult = await slack.postSmsFollowupAlert(client.slack_bot_token, client.slack_channel_id, {
           replyId: reply.id,
@@ -202,11 +161,8 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
 
         return res.status(200).json({ ok: true, path: 'free_site_affirmative' });
       }
-
-      // Not affirmative after prompt — re-classify as new inbound
     }
 
-    // ─── Classify with OpenAI ───────────────────────────────────────
     let intent;
     let reasoning;
     try {
@@ -234,34 +190,14 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       console.warn('[Webhook SMS] branch handler', e.message);
     }
 
-    if (client.google_sheet_id && sheetRow) {
-      const log = { reply: inboundMessage, intent };
-      if (intent === 'negative') log.customer_status = 'dnc';
-      await sheets.updateProspectByHeaders(
-        client.google_sheet_id,
-        prospectTab,
-        sheetRow,
-        headers,
-        log
-      );
-    }
+    await prospects.patchProspectFields(clientId, phoneDisplay, {
+      reply: inboundMessage,
+      intent,
+      ...(intent === 'negative' ? { customer_status: 'dnc', dnc: true } : {}),
+    });
 
     if (intent === 'negative') {
-      if (client.google_sheet_id) {
-        await sheets.appendDnc(client.google_sheet_id, dncTab, {
-          phone: phoneDisplay,
-          reason: 'negative_sms',
-        });
-        if (sheetRow) {
-          await sheets.updateProspectByHeaders(
-            client.google_sheet_id,
-            prospectTab,
-            sheetRow,
-            headers,
-            { customer_status: 'dnc', dnc: 'yes' }
-          );
-        }
-      }
+      await prospects.appendDnc(clientId, phoneDisplay, 'negative_sms');
       await smsCampaign.cancelJobsForPhone(clientId, phoneDisplay, 'intent_negative');
       return res.status(200).json({ ok: true, intent: 'negative' });
     }
@@ -300,14 +236,11 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       return res.status(200).json({ ok: true, intent, replyId: reply.id });
     }
 
-    // positive — no Slack; auto follow-up after delay; log inbound to sheet now
-    if (sheetRow) {
-      await sheets.updateProspectByHeaders(client.google_sheet_id, prospectTab, sheetRow, headers, {
-        reply: inboundMessage,
-        intent: 'positive',
-        sent_status: 'awaiting_free_site_prompt',
-      });
-    }
+    await prospects.patchProspectFields(clientId, phoneDisplay, {
+      reply: inboundMessage,
+      intent: 'positive',
+      sent_status: 'awaiting_free_site_prompt',
+    });
 
     await db.query(
       `INSERT INTO sms_conversation_state (client_id, phone_e164, stage, updated_at)
@@ -357,18 +290,10 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
           scheduledLogId,
         });
 
-        if (sheetRow) {
-          await sheets.updateProspectByHeaders(
-            client.google_sheet_id,
-            prospectTab,
-            sheetRow,
-            headers,
-            {
-              customer_status: 'free_site_prompt_sent',
-              sent_status: 'free_site_prompt_sent',
-            }
-          );
-        }
+        await prospects.patchProspectFields(clientId, phoneDisplay, {
+          customer_status: 'free_site_prompt_sent',
+          sent_status: 'free_site_prompt_sent',
+        });
 
         await db.query(
           `INSERT INTO pending_replies

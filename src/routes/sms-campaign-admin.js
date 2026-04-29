@@ -1,6 +1,8 @@
 const { Router } = require('express');
 const multer = require('multer');
 const smsCampaign = require('../services/sms-campaign');
+const prospects = require('../services/prospects');
+const { listCampaignEvents } = require('../services/campaign-log');
 
 const router = Router();
 const upload = multer({
@@ -270,6 +272,27 @@ router.get('/admin/sms/staged-leads/:clientId', async (req, res) => {
     res.json({ leads: rows });
   } catch (err) {
     console.error('[SMS Campaign] staged list', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/admin/sms/campaign-events/:clientId', async (req, res) => {
+  try {
+    const limit = req.query.limit;
+    const events = await listCampaignEvents(req.params.clientId, limit);
+    res.json({ events });
+  } catch (err) {
+    console.error('[SMS Campaign] events', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/admin/sms/prospects/:clientId', async (req, res) => {
+  try {
+    const rows = await prospects.listProspects(req.params.clientId, req.query.limit);
+    res.json({ prospects: rows });
+  } catch (err) {
+    console.error('[SMS Campaign] prospects list', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -1,7 +1,7 @@
 const db = require('../db');
-const sheets = require('../services/sheets');
 const gmailWatch = require('../services/gmail-watch');
 const slack = require('../services/slack');
+const gmailEmailLog = require('../services/gmail-email-log');
 
 function parseIsoMs(s) {
   if (!s) return null;
@@ -9,12 +9,9 @@ function parseIsoMs(s) {
   return Number.isFinite(t) ? t : null;
 }
 
-/** Poll Gmail for clients with Sheets + Gmail connected; notify Slack once per message */
 async function pollAllClients() {
   const { rows: clients } = await db.query(
-    `SELECT * FROM clients WHERE active = true
-       AND google_sheet_id IS NOT NULL
-       AND gmail_refresh_token IS NOT NULL`
+    `SELECT * FROM clients WHERE active = true AND gmail_refresh_token IS NOT NULL`
   );
 
   for (const client of clients) {
@@ -27,16 +24,12 @@ async function pollAllClients() {
 }
 
 async function pollOneClient(client) {
-  const spreadsheetId = client.google_sheet_id;
-  const emailLogTab = client.sheet_tab_email_log || 'EmailLog';
-
   let sinceMs = parseIsoMs(client.gmail_watcher_started_at);
-  const cell = await sheets.getSettingCell(spreadsheetId, client);
-  const cellMs = parseIsoMs(cell.value);
-  sinceMs = Math.max(sinceMs || 0, cellMs || 0);
+  const lastChecked = parseIsoMs(client.gmail_last_checked_at);
+  sinceMs = Math.max(sinceMs || 0, lastChecked || 0);
 
   if (!sinceMs) {
-    console.warn('[GmailPoll] No since timestamp — set gmail_watcher_started_at or Settings cell', {
+    console.warn('[GmailPoll] No since timestamp — set gmail_watcher_started_at or gmail_last_checked_at', {
       clientId: client.id,
     });
     return;
@@ -56,24 +49,13 @@ async function pollOneClient(client) {
       [client.id, msg.id]
     );
 
-    let sheetRowNum = null;
-    try {
-      const app = await sheets.appendEmailLogPending(spreadsheetId, emailLogTab, {
-        timestamp: new Date().toISOString(),
-        senderEmail: msg.senderEmail,
-        senderName: msg.senderName,
-        subject: msg.subject,
-        gmailMessageId: msg.id,
-      });
-      sheetRowNum = app.rowNum;
-    } catch (e) {
-      console.error('[GmailPoll] Sheet append failed', e.message);
-    }
-
-    await db.query(
-      'UPDATE gmail_notifications SET sheet_log_row = $1 WHERE id = $2',
-      [sheetRowNum, notif.id]
-    );
+    await gmailEmailLog.insertInboundEmail(client.id, {
+      gmail_message_id: msg.id,
+      sender_email: msg.senderEmail || null,
+      sender_name: msg.senderName || null,
+      subject: msg.subject || null,
+      body_preview: (msg.body || msg.snippet || '').slice(0, 8000),
+    });
 
     const slackResult = await slack.postGmailInbound(client.slack_bot_token, client.slack_channel_id, {
       notificationId: notif.id,
@@ -90,7 +72,10 @@ async function pollOneClient(client) {
   }
 
   const nowIso = new Date().toISOString();
-  await sheets.setLastEmailCheckIso(spreadsheetId, client, nowIso);
+  await db.query(
+    `UPDATE clients SET gmail_last_checked_at = $1::timestamptz, updated_at = now() WHERE id = $2`,
+    [nowIso, client.id]
+  );
 }
 
 module.exports = { pollAllClients, pollOneClient };

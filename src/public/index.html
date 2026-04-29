@@ -808,15 +808,15 @@
       </div>
 
       <div class="form-group">
-        <label>Google Sheet ID (SMS prospects)</label>
-        <input type="text" id="f_google_sheet_id" placeholder="From sheets.google.com URL — spreadsheet id string">
-        <div class="hint">Required for SMS inbound. Sheet needs tabs: Prospects (phone, business_name, vertical, city, …), DNC, Settings (B2 = last email check), EmailLog.</div>
+        <label>Google Sheet ID (legacy — optional)</label>
+        <input type="text" id="f_google_sheet_id" placeholder="Leave blank — prospects live in Supabase">
+        <div class="hint">SMS prospects and DNC are stored in <strong>Supabase</strong> (<code>sms_prospect</code>). Set <code>SUPABASE_URL</code> + <code>SUPABASE_SERVICE_ROLE_KEY</code> on the server. Sheet fields here are unused for SMS unless you add Sheet code back.</div>
       </div>
 
       <div class="form-group">
         <label>Positive reply SMS template</label>
         <textarea id="f_sms_free_site_body" placeholder="I actually made you a site for free — want me to send it to you?&#10;Or use {{business_name}}, {{city}}, {{vertical}}, {{phone}}"></textarea>
-        <div class="hint">Sent after a <strong>positive</strong> classification (after the delay). <code>{{variable}}</code> names match sheet column headers (snake_case).</div>
+        <div class="hint">Sent after a <strong>positive</strong> classification (after the delay). <code>{{variable}}</code> names match prospect columns and <code>extra</code> fields in Supabase (snake_case).</div>
       </div>
 
       <div class="form-group">
@@ -1137,7 +1137,7 @@ function openDetail(id) {
 
     <div class="detail-section">
       <h4>SMS cockpit</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Preview messages with sheet variables, see send gaps, and test-send (uses <code>SMSMOBILEAPI_KEY</code> on the server). Set <strong>Minimum gap between outbound texts</strong> in Edit client to throttle all SMS from this client for carrier safety.</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Preview messages with Supabase prospect variables, see send gaps, and test-send (uses <code>SMSMOBILEAPI_KEY</code>). Configure Supabase env on the server.</p>
       <div class="sms-cockpit">
         <div class="sms-cockpit-grid">
           <div>
@@ -1149,7 +1149,7 @@ function openDetail(id) {
             <input type="password" id="sms_action_secret_${c.id}" placeholder="Paste once — stored in this browser" autocomplete="off" onchange="sessionStorage.setItem('sms_action_secret', this.value)">
           </div>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview from sheet</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview from Supabase</button>
         <div id="sms_preview_out_${c.id}" class="sms-preview-box" style="display:none"></div>
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
           <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')">Send preview as SMS</button>
@@ -1162,8 +1162,7 @@ function openDetail(id) {
     <div class="detail-section">
       <h4>SMS sequences</h4>
         <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
-        Build multi-step outbound SMS: <strong>schedule</strong> (timezone, send window, daily caps), <strong>staged CSV</strong> (extra variables when sheet has no row),
-        <strong>branching</strong> (on reply intent, move lead to another campaign), and <code>{{placeholders}}</code> from the Google Sheet and/or staged fields.
+        Build multi-step outbound SMS: <strong>schedule</strong>, <strong>CSV → Supabase</strong> (<code>sms_prospect</code>), <strong>branching</strong>, and <code>{{placeholders}}</code> from prospect columns + <code>extra</code> JSON. Requires <code>SUPABASE_URL</code> + service role on the server.
         Inbound messages get <strong>sentiment</strong> (gpt-4.1-nano) in the log; <strong>STOP / unsubscribe</strong> auto-DNCs and cancels queued campaign texts.
       </p>
       <div class="sms-cockpit sms-campaign-ui">
@@ -1216,7 +1215,7 @@ function openDetail(id) {
           </div>
           <div id="sms_cp_steps_${c.id}"></div>
           <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Staged leads (CSV upload)</h5>
-          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Columns become <code>{{snake_case}}</code> variables merged over sheet data. Requires a <code>phone</code> column.</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Writes to Supabase <code>sms_prospect</code>. Extra columns map to <code>extra</code> for <code>{{snake_case}}</code>. Requires a <code>phone</code> column.</p>
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
             <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
             <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
@@ -1250,6 +1249,19 @@ function openDetail(id) {
         </div>
         <div id="sms_cp_empty_${c.id}" style="opacity:0.7;font-size:12px">Select or create a campaign.</div>
       </div>
+    </div>
+
+    <div class="detail-section">
+      <h4>Supabase — leads &amp; campaign log</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Prospects and DNC flags live in Supabase. Campaign sends enrollments also append to <code>campaign_event_log</code>.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadProspects('${c.id}')">Refresh prospects</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Refresh campaign events</button>
+      </div>
+      <h5 style="font-size:11px;color:var(--text-muted)">Prospects (recent)</h5>
+      <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
+      <h5 style="margin-top:12px;font-size:11px;color:var(--text-muted)">Campaign events (recent)</h5>
+      <div id="sms_sb_events_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
     </div>
 
     <div class="detail-section">
@@ -1319,6 +1331,8 @@ function openDetail(id) {
   }
   loadSmsLog(c.id);
   smsCpReloadList(c.id);
+  smsSupabaseLoadProspects(c.id);
+  smsSupabaseLoadEvents(c.id);
 }
 
 async function toggleActive() {
@@ -1488,7 +1502,7 @@ async function loadSmsPreview(clientId) {
     window._smsPreview[clientId] = j;
     const vars = JSON.stringify(j.variables || {}, null, 2);
     out.innerHTML =
-      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Delay setting: <strong>' + (j.delay_ms != null ? j.delay_ms + ' ms' : '—') + '</strong> · Row match: <strong>' + (j.matched ? 'yes' : 'no') + '</strong></div>' +
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Delay setting: <strong>' + (j.delay_ms != null ? j.delay_ms + ' ms' : '—') + '</strong> · Prospect in Supabase: <strong>' + (j.matched ? 'yes' : 'no') + '</strong></div>' +
       '<div style="font-size:11px;color:var(--text-muted)">Variables</div><pre style="font-size:11px;margin:4px 0 10px;white-space:pre-wrap">' + esc(vars) + '</pre>' +
       '<div style="font-size:11px;color:var(--text-muted)">Template</div><div style="opacity:0.9;margin-bottom:8px;white-space:pre-wrap">' + esc(j.template || '') + '</div>' +
       '<div style="font-size:11px;color:var(--text-muted)">Rendered (what would send)</div><div id="sms_rendered_' + clientId + '" style="font-weight:600;margin-top:4px;white-space:pre-wrap">' + esc(j.rendered || '') + '</div>';
@@ -1679,7 +1693,8 @@ async function smsCpUploadCsv(clientId) {
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Upload failed');
-    toast(`Imported ${j.imported} staged rows`, 'success');
+    toast(`Imported ${j.imported} prospects (Supabase)`, 'success');
+    smsSupabaseLoadProspects(clientId);
     input.value = '';
   } catch (e) {
     toast(e.message, 'error');
@@ -1691,9 +1706,54 @@ async function smsCpStagedCount(clientId) {
     const res = await fetch(`${API}/admin/sms/staged-leads/${clientId}?limit=5000`);
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Failed');
-    toast(`${(j.leads || []).length} staged phone(s)`, 'success');
+    toast(`${(j.leads || []).length} prospect row(s) in Supabase`, 'success');
   } catch (e) {
     toast(e.message, 'error');
+  }
+}
+
+async function smsSupabaseLoadProspects(clientId) {
+  const el = document.getElementById(`sms_sb_prospects_${clientId}`);
+  if (!el) return;
+  el.innerHTML = 'Loading…';
+  try {
+    const res = await fetch(`${API}/admin/sms/prospects/${clientId}?limit=80`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    const rows = j.prospects || [];
+    if (!rows.length) {
+      el.innerHTML = '<span style="opacity:0.6">No prospects yet — upload CSV above.</span>';
+      return;
+    }
+    el.innerHTML = '<table class="sms-log-table"><thead><tr><th>Phone</th><th>DNC</th><th>Business</th><th>City</th><th>Updated</th></tr></thead><tbody>' +
+      rows.map(r =>
+        `<tr><td>${esc(r.phone_e164)}</td><td>${r.is_dnc ? 'yes' : ''}</td><td>${esc(r.business_name || '')}</td><td>${esc(r.city || '')}</td><td>${r.updated_at ? new Date(r.updated_at).toLocaleString() : ''}</td></tr>`
+      ).join('') + '</tbody></table>';
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--red)">' + esc(e.message) + '</span>';
+  }
+}
+
+async function smsSupabaseLoadEvents(clientId) {
+  const el = document.getElementById(`sms_sb_events_${clientId}`);
+  if (!el) return;
+  el.innerHTML = 'Loading…';
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign-events/${clientId}?limit=50`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    const evs = j.events || [];
+    if (!evs.length) {
+      el.innerHTML = '<span style="opacity:0.6">No events yet (configure Supabase + send campaigns).</span>';
+      return;
+    }
+    el.innerHTML = '<table class="sms-log-table"><thead><tr><th>When</th><th>Type</th><th>Campaign</th><th>Detail</th></tr></thead><tbody>' +
+      evs.map(ev => {
+        const pl = JSON.stringify(ev.payload || {}).slice(0, 200);
+        return `<tr><td>${ev.created_at ? new Date(ev.created_at).toLocaleString() : ''}</td><td>${esc(ev.event_type)}</td><td style="font-size:11px">${esc(ev.campaign_id || '')}</td><td style="font-size:11px;word-break:break-all">${esc(pl)}</td></tr>`;
+      }).join('') + '</tbody></table>';
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--red)">' + esc(e.message) + '</span>';
   }
 }
 
@@ -1885,7 +1945,7 @@ async function smsCpPreview(clientId) {
       const stepsHtml = (p.steps || []).map(st =>
         `<div style="margin:6px 0;padding-left:8px;border-left:2px solid var(--border)"><strong>Step ${st.sort_order}</strong> · delay after: ${st.delay_after_ms} ms<br><span style="opacity:0.85;white-space:pre-wrap">${esc(st.rendered)}</span></div>`
       ).join('');
-      return `<div class="sms-cp-preview-item"><strong>${esc(p.phone)}</strong> · sheet row: ${p.matched ? 'yes' : 'no'}<br>${stepsHtml}</div>`;
+      return `<div class="sms-cp-preview-item"><strong>${esc(p.phone)}</strong> · prospect: ${p.matched ? 'yes' : 'no'}<br>${stepsHtml}</div>`;
     }).join('') || '<div>No previews</div>';
   } catch (e) {
     out.textContent = e.message;
@@ -1953,7 +2013,7 @@ async function sendTestSms(clientId) {
     await loadSmsPreview(clientId);
     body = (window._smsPreview && window._smsPreview[clientId] && window._smsPreview[clientId].rendered) || '';
   }
-  if (!body) { toast('Load preview first (or fix sheet / template)', 'error'); return; }
+  if (!body) { toast('Load preview first (add prospect in Supabase / CSV)', 'error'); return; }
   try {
     const res = await fetch(`${API}/admin/sms/test-send/${clientId}`, {
       method: 'POST',

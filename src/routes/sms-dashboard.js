@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const db = require('../db');
-const sheets = require('../services/sheets');
+const prospects = require('../services/prospects');
 const { renderSmsTemplate } = require('../utils/sms-template');
 const smsLog = require('../services/sms-log');
 
@@ -13,15 +13,6 @@ function dashboardSecretOk(req) {
   if (!secret) return false;
   const got = (req.headers['x-dashboard-secret'] || req.headers['x-webhook-test-secret'] || '').trim();
   return got === secret;
-}
-
-function getCell(headers, row, ...names) {
-  for (const n of names) {
-    const k = n.toLowerCase().replace(/\s+/g, '_');
-    const idx = headers[k];
-    if (idx !== undefined && row[idx] != null) return String(row[idx]).trim();
-  }
-  return '';
 }
 
 /** GET /admin/sms/log/:clientId — timeline of SMS in/out with delays */
@@ -41,7 +32,7 @@ router.get('/admin/sms/log/:clientId', async (req, res) => {
 
 /**
  * GET /admin/sms/preview/:clientId?phone=+1...
- * Returns template, variable map from sheet row, rendered body.
+ * Variables from Supabase sms_prospect (requires SUPABASE_* env).
  */
 router.get('/admin/sms/preview/:clientId', async (req, res) => {
   try {
@@ -49,45 +40,20 @@ router.get('/admin/sms/preview/:clientId', async (req, res) => {
     const phone = String(req.query.phone || '').trim();
     const { rows: [client] } = await db.query('SELECT * FROM clients WHERE id = $1', [clientId]);
     if (!client) return res.status(404).json({ error: 'Client not found' });
-    if (!client.google_sheet_id) {
-      return res.status(400).json({ error: 'google_sheet_id not set for client' });
-    }
     if (!phone) return res.status(400).json({ error: 'phone query param required' });
-
-    const prospectTab = client.sheet_tab_prospects || 'Prospects';
-    const { row, headers, rowData } = await sheets.findProspectRow(
-      client.google_sheet_id,
-      prospectTab,
-      phone
-    );
 
     const template = (client.sms_free_site_body && String(client.sms_free_site_body).trim())
       || DEFAULT_FREE_SITE;
     const delayMs = client.sms_free_site_delay_ms != null ? Number(client.sms_free_site_delay_ms) : 20000;
 
-    if (!row || !rowData) {
-      return res.json({
-        phone,
-        matched: false,
-        template,
-        delay_ms: delayMs,
-        variables: {},
-        rendered: renderSmsTemplate(template, {}),
-      });
-    }
-
-    const variables = {
-      phone: phone,
-      business_name: getCell(headers, rowData, 'business_name', 'business name'),
-      vertical: getCell(headers, rowData, 'vertical'),
-      city: getCell(headers, rowData, 'city'),
-    };
+    const { row } = await prospects.findProspectByPhone(clientId, phone);
+    const variables = row ? prospects.prospectRowToVariables(row) : { phone };
     const rendered = renderSmsTemplate(template, variables);
 
     res.json({
       phone,
-      matched: true,
-      sheet_row: row,
+      matched: !!row,
+      prospect_id: row?.id || null,
       template,
       delay_ms: delayMs,
       variables,
