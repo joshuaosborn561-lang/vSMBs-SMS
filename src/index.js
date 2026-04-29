@@ -6,6 +6,7 @@ const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const testWebhookRoutes = require('./routes/test-webhooks');
 const smsDashboardRoutes = require('./routes/sms-dashboard');
+const smsCampaignAdminRoutes = require('./routes/sms-campaign-admin');
 const { startCron } = require('./cron');
 
 const app = express();
@@ -33,6 +34,7 @@ app.use(webhookRoutes);
 app.use(slackRoutes);
 app.use(adminRoutes);
 app.use(smsDashboardRoutes);
+app.use(smsCampaignAdminRoutes);
 app.use(authRoutes);
 app.use(testWebhookRoutes);
 

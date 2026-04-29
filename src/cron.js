@@ -3,6 +3,7 @@ const db = require('./db');
 const slack = require('./services/slack');
 const { sendReminder } = require('./services/reminder-email');
 const { pollAllClients } = require('./services/gmail-poll');
+const { processDueJobs } = require('./services/sms-campaign');
 
 function startCron() {
   // ─── Stale reply reminders (every 10 minutes) ─────────────────────
@@ -124,7 +125,19 @@ function startCron() {
     }
   });
 
-  console.log('[Cron] Jobs scheduled: reply reminders + meeting reminders (every 10 min), Gmail poll (every 5 min)');
+  // ─── SMS sequence sends (every minute) ───────────────────────────────
+  cron.schedule('* * * * *', async () => {
+    try {
+      const r = await processDueJobs(40);
+      if (r.processed > 0) {
+        console.log('[Cron] SMS campaign jobs', r);
+      }
+    } catch (err) {
+      console.error('[Cron] SMS campaign worker failed', { err: err.message });
+    }
+  });
+
+  console.log('[Cron] Jobs scheduled: reply reminders + meeting reminders (every 10 min), Gmail poll (every 5 min), SMS campaigns (every min)');
 }
 
 module.exports = { startCron };

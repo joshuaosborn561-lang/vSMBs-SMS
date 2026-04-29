@@ -642,6 +642,52 @@
     .sms-log-dir.out { color: var(--yellow); }
     .sms-delay { color: var(--text-muted); font-size: 11px; }
 
+    .sms-campaign-ui { margin-top: 10px; }
+    .sms-campaign-bar {
+      display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 12px;
+    }
+    .sms-campaign-bar label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px; }
+    .sms-campaign-bar select {
+      min-width: 200px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px;
+    }
+    .sms-cp-meta { display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-bottom: 12px; align-items: end; }
+    @media (max-width: 720px) { .sms-cp-meta { grid-template-columns: 1fr; } }
+    .sms-cp-meta input[type="text"] {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px;
+    }
+    .sms-cp-active { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+    .sms-step-block {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .sms-step-block h5 { font-size: 12px; color: var(--accent-light); margin-bottom: 8px; }
+    .sms-step-block textarea {
+      width: 100%; min-height: 64px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 8px; border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical;
+    }
+    .sms-step-block .delay-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    @media (max-width: 600px) { .sms-step-block .delay-row { grid-template-columns: 1fr; } }
+    .sms-step-block input[type="number"] {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 8px; border-radius: 6px; font-size: 13px;
+    }
+    .sms-cp-csv {
+      width: 100%; min-height: 100px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 10px; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical;
+    }
+    .sms-cp-preview-out {
+      max-height: 320px; overflow: auto; font-size: 12px; margin-top: 10px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    }
+    .sms-cp-preview-item { border-bottom: 1px solid var(--border); padding: 10px 0; }
+    .sms-cp-preview-item:last-child { border-bottom: none; }
+    .sms-cp-jobs { max-height: 200px; overflow: auto; margin-top: 10px; font-size: 11px; }
+
     /* ─── Toast ───────────────────────────── */
     .toast {
       position: fixed;
@@ -1108,6 +1154,54 @@ function openDetail(id) {
     </div>
 
     <div class="detail-section">
+      <h4>SMS sequences</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
+        Build multi-step outbound SMS like SmartLead: upload phones (CSV or one per line), define steps with <code>{{placeholders}}</code> matching your sheet columns,
+        preview rendered copy, then enroll to queue sends. Delays are <strong>after</strong> each step before the next (step 1 sends immediately on enroll).
+      </p>
+      <div class="sms-cockpit sms-campaign-ui">
+        <div class="sms-campaign-bar">
+          <div>
+            <label>Campaign</label>
+            <select id="sms_cp_select_${c.id}" onchange="smsCpOnSelect('${c.id}')">
+              <option value="">— loading —</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpNewCampaign('${c.id}')">+ New campaign</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpReloadList('${c.id}')">Refresh list</button>
+        </div>
+        <div id="sms_cp_editor_${c.id}" style="display:none">
+          <div class="sms-cp-meta">
+            <div>
+              <label>Campaign name</label>
+              <input type="text" id="sms_cp_name_${c.id}" placeholder="e.g. Cold trade — no site">
+            </div>
+            <div class="sms-cp-active">
+              <label><input type="checkbox" id="sms_cp_active_${c.id}" checked> Active (accept enrollments)</label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpSaveMeta('${c.id}')">Save name &amp; status</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpSaveSteps('${c.id}')">Save sequence steps</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpAddStep('${c.id}')">+ Add step</button>
+          </div>
+          <div id="sms_cp_steps_${c.id}"></div>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Lead list (phones)</h5>
+          <textarea class="sms-cp-csv" id="sms_cp_phones_${c.id}" placeholder="+15551234567&#10;+15559876543&#10;Or CSV: phone,business_name,city"></textarea>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpPreview('${c.id}')">Preview for these numbers</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpEnroll('${c.id}')">Enroll &amp; send step 1</button>
+          </div>
+          <div id="sms_cp_preview_${c.id}" class="sms-cp-preview-out" style="display:none"></div>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Queued / recent jobs</h5>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpLoadJobs('${c.id}')">Refresh jobs</button>
+          <div id="sms_cp_jobs_${c.id}" class="sms-cp-jobs"></div>
+        </div>
+        <div id="sms_cp_empty_${c.id}" style="opacity:0.7;font-size:12px">Select or create a campaign.</div>
+      </div>
+    </div>
+
+    <div class="detail-section">
       <h4>Credentials</h4>
       <div class="detail-row">
         <span class="label">SmartLead API Key</span>
@@ -1173,6 +1267,7 @@ function openDetail(id) {
     secEl.value = sessionStorage.getItem('sms_action_secret');
   }
   loadSmsLog(c.id);
+  smsCpReloadList(c.id);
 }
 
 async function toggleActive() {
@@ -1342,6 +1437,303 @@ async function loadSmsPreview(clientId) {
       '<div style="font-size:11px;color:var(--text-muted)">Rendered (what would send)</div><div id="sms_rendered_' + clientId + '" style="font-weight:600;margin-top:4px;white-space:pre-wrap">' + esc(j.rendered || '') + '</div>';
   } catch (e) {
     out.textContent = e.message;
+  }
+}
+
+function smsCpGetSecret(clientId) {
+  const el = document.getElementById(`sms_action_secret_${clientId}`);
+  const v = (el && el.value && el.value.trim()) || sessionStorage.getItem('sms_action_secret') || '';
+  return v;
+}
+
+function smsCpEnsureStore(clientId) {
+  window._smsCp = window._smsCp || {};
+  window._smsCp[clientId] = window._smsCp[clientId] || { campaignId: null };
+  return window._smsCp[clientId];
+}
+
+async function smsCpReloadList(clientId) {
+  const sel = document.getElementById(`sms_cp_select_${clientId}`);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const res = await fetch(`${API}/admin/sms/campaigns/${clientId}`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed to load campaigns');
+    const list = j.campaigns || [];
+    smsCpEnsureStore(clientId).list = list;
+    sel.innerHTML = '<option value="">— choose campaign —</option>' +
+      list.map(c =>
+        `<option value="${c.id}">${esc(c.name)}${c.active ? '' : ' (paused)'}</option>`
+      ).join('');
+    const cur = smsCpEnsureStore(clientId).campaignId;
+    if (cur && list.some(x => x.id === cur)) sel.value = cur;
+  } catch (e) {
+    sel.innerHTML = '<option value="">Error</option>';
+    toast(e.message, 'error');
+  }
+}
+
+function smsCpOnSelect(clientId) {
+  const sel = document.getElementById(`sms_cp_select_${clientId}`);
+  const id = sel && sel.value;
+  const editor = document.getElementById(`sms_cp_editor_${clientId}`);
+  const empty = document.getElementById(`sms_cp_empty_${clientId}`);
+  smsCpEnsureStore(clientId).campaignId = id || null;
+  if (!id) {
+    if (editor) editor.style.display = 'none';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  if (editor) editor.style.display = 'block';
+  smsCpLoadCampaign(clientId, id);
+}
+
+async function smsCpLoadCampaign(clientId, campaignId) {
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${campaignId}`);
+    const c = await res.json();
+    if (!res.ok) throw new Error(c.error || 'Load failed');
+    smsCpEnsureStore(clientId).detail = c;
+    document.getElementById(`sms_cp_name_${clientId}`).value = c.name || '';
+    document.getElementById(`sms_cp_active_${clientId}`).checked = !!c.active;
+    const steps = (c.steps && c.steps.length) ? c.steps : [{ sort_order: 1, body_template: 'Hi {{business_name}} — quick question about your site.', delay_after_ms: 86400000 }];
+    smsCpRenderSteps(clientId, steps);
+    smsCpLoadJobs(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function smsCpRenderSteps(clientId, steps) {
+  const wrap = document.getElementById(`sms_cp_steps_${clientId}`);
+  if (!wrap) return;
+  wrap.innerHTML = steps.map((s, i) => {
+    const ord = i + 1;
+    const body = esc(s.body_template || s.body || '');
+    const del = s.delay_after_ms != null ? Number(s.delay_after_ms) : 86400000;
+    return `<div class="sms-step-block" data-step-index="${i}">
+      <h5>Step ${ord}${ord < steps.length ? ' · wait after this step before next' : ' · final step'}</h5>
+      <textarea class="sms_cp_step_body" placeholder="Message body with {{variables}}">${body}</textarea>
+      <div class="delay-row">
+        <div><label style="font-size:11px;color:var(--text-muted)">Delay after this step (ms)</label>
+        <input type="number" class="sms_cp_step_delay" min="0" step="1000" value="${del}"></div>
+        <div style="display:flex;align-items:flex-end"><button type="button" class="btn btn-danger btn-sm" onclick="smsCpRemoveStep('${clientId}',${i})">Remove step</button></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function smsCpAddStep(clientId) {
+  const wrap = document.getElementById(`sms_cp_steps_${clientId}`);
+  const blocks = wrap ? wrap.querySelectorAll('.sms-step-block') : [];
+  const steps = [];
+  blocks.forEach((block) => {
+    const body = block.querySelector('.sms_cp_step_body');
+    const delay = block.querySelector('.sms_cp_step_delay');
+    steps.push({
+      body_template: body ? body.value : '',
+      delay_after_ms: delay ? parseInt(delay.value, 10) || 0 : 0,
+    });
+  });
+  steps.push({ body_template: 'Follow-up: {{business_name}}', delay_after_ms: 86400000 });
+  smsCpRenderSteps(clientId, steps);
+}
+
+function smsCpRemoveStep(clientId, index) {
+  const wrap = document.getElementById(`sms_cp_steps_${clientId}`);
+  const blocks = wrap ? wrap.querySelectorAll('.sms-step-block') : [];
+  const steps = [];
+  blocks.forEach((block, i) => {
+    if (i === index) return;
+    const body = block.querySelector('.sms_cp_step_body');
+    const delay = block.querySelector('.sms_cp_step_delay');
+    steps.push({
+      body_template: body ? body.value : '',
+      delay_after_ms: delay ? parseInt(delay.value, 10) || 0 : 0,
+    });
+  });
+  if (!steps.length) steps.push({ body_template: '', delay_after_ms: 86400000 });
+  smsCpRenderSteps(clientId, steps);
+}
+
+function smsCpCollectSteps(clientId) {
+  const wrap = document.getElementById(`sms_cp_steps_${clientId}`);
+  const blocks = wrap ? wrap.querySelectorAll('.sms-step-block') : [];
+  const steps = [];
+  blocks.forEach((block) => {
+    const body = block.querySelector('.sms_cp_step_body');
+    const delay = block.querySelector('.sms_cp_step_delay');
+    steps.push({
+      body_template: body ? body.value.trim() : '',
+      delay_after_ms: delay ? Math.max(0, parseInt(delay.value, 10) || 0) : 0,
+    });
+  });
+  return steps;
+}
+
+async function smsCpNewCampaign(clientId) {
+  const secret = smsCpGetSecret(clientId);
+  if (!secret) { toast('Enter action secret first', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  const name = (window.prompt('Campaign name?', 'Outbound sequence') || '').trim() || 'Outbound sequence';
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign/${clientId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      body: JSON.stringify({ name }),
+    });
+    const row = await res.json();
+    if (!res.ok) throw new Error(row.error || 'Create failed');
+    await smsCpReloadList(clientId);
+    const sel = document.getElementById(`sms_cp_select_${clientId}`);
+    if (sel) { sel.value = row.id; }
+    smsCpEnsureStore(clientId).campaignId = row.id;
+    document.getElementById(`sms_cp_empty_${clientId}`).style.display = 'none';
+    document.getElementById(`sms_cp_editor_${clientId}`).style.display = 'block';
+    await smsCpLoadCampaign(clientId, row.id);
+    const steps = [{ body_template: 'Hi {{business_name}} — do you have a website for {{city}} jobs?', delay_after_ms: 86400000 }];
+    await fetch(`${API}/admin/sms/campaign/${clientId}/${row.id}/steps`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      body: JSON.stringify({ steps }),
+    });
+    await smsCpLoadCampaign(clientId, row.id);
+    toast('Campaign created', 'success');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function smsCpSaveMeta(clientId) {
+  const secret = smsCpGetSecret(clientId);
+  const id = smsCpEnsureStore(clientId).campaignId;
+  if (!secret || !id) { toast('Select a campaign and enter secret', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Campaign';
+  const active = document.getElementById(`sms_cp_active_${clientId}`).checked;
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      body: JSON.stringify({ name, active }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Save failed');
+    toast('Saved', 'success');
+    smsCpReloadList(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function smsCpSaveSteps(clientId) {
+  const secret = smsCpGetSecret(clientId);
+  const id = smsCpEnsureStore(clientId).campaignId;
+  if (!secret || !id) { toast('Select a campaign and enter secret', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  const steps = smsCpCollectSteps(clientId);
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/steps`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      body: JSON.stringify({ steps }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Save failed');
+    toast('Sequence saved', 'success');
+    await smsCpLoadCampaign(clientId, id);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function smsCpParsePhones(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const phones = [];
+  for (const line of lines) {
+    const first = line.split(',')[0].trim().replace(/^["']|["']$/g, '');
+    if (first) phones.push(first);
+  }
+  return phones;
+}
+
+async function smsCpPreview(clientId) {
+  const id = smsCpEnsureStore(clientId).campaignId;
+  if (!id) { toast('Select a campaign', 'error'); return; }
+  const phones = smsCpParsePhones(document.getElementById(`sms_cp_phones_${clientId}`).value);
+  if (!phones.length) { toast('Enter at least one phone', 'error'); return; }
+  const out = document.getElementById(`sms_cp_preview_${clientId}`);
+  out.style.display = 'block';
+  out.textContent = 'Loading…';
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phones }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Preview failed');
+    const prev = j.previews || [];
+    out.innerHTML = prev.map(p => {
+      const stepsHtml = (p.steps || []).map(st =>
+        `<div style="margin:6px 0;padding-left:8px;border-left:2px solid var(--border)"><strong>Step ${st.sort_order}</strong> · delay after: ${st.delay_after_ms} ms<br><span style="opacity:0.85;white-space:pre-wrap">${esc(st.rendered)}</span></div>`
+      ).join('');
+      return `<div class="sms-cp-preview-item"><strong>${esc(p.phone)}</strong> · sheet row: ${p.matched ? 'yes' : 'no'}<br>${stepsHtml}</div>`;
+    }).join('') || '<div>No previews</div>';
+  } catch (e) {
+    out.textContent = e.message;
+  }
+}
+
+async function smsCpEnroll(clientId) {
+  const secret = smsCpGetSecret(clientId);
+  const id = smsCpEnsureStore(clientId).campaignId;
+  if (!secret || !id) { toast('Select campaign and enter secret', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  const phones = smsCpParsePhones(document.getElementById(`sms_cp_phones_${clientId}`).value);
+  if (!phones.length) { toast('Enter at least one phone', 'error'); return; }
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      body: JSON.stringify({ phones }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Enroll failed');
+    toast(`Enrolled ${j.enrolled} · skipped DNC ${j.skipped_dnc} · already active ${j.skipped_duplicate}`, 'success');
+    if (j.errors && j.errors.length) console.warn('Enroll errors', j.errors);
+    loadSmsLog(clientId);
+    smsCpLoadJobs(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function smsCpLoadJobs(clientId) {
+  const id = smsCpEnsureStore(clientId).campaignId;
+  const wrap = document.getElementById(`sms_cp_jobs_${clientId}`);
+  if (!wrap || !id) return;
+  wrap.innerHTML = 'Loading…';
+  try {
+    const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/jobs?limit=50`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    const jobs = j.jobs || [];
+    if (!jobs.length) {
+      wrap.innerHTML = '<span style="opacity:0.6">No jobs yet.</span>';
+      return;
+    }
+    wrap.innerHTML = '<table class="sms-log-table"><thead><tr><th>Scheduled</th><th>Step</th><th>Phone</th><th>Status</th><th>Body</th></tr></thead><tbody>' +
+      jobs.map(job => {
+        const t = new Date(job.scheduled_at).toLocaleString();
+        const body = (job.payload && job.payload.body) ? job.payload.body : '';
+        const err = job.error_message ? `<div style="color:var(--red)">${esc(job.error_message)}</div>` : '';
+        return `<tr><td>${t}</td><td>${job.step_order}</td><td>${esc(job.lead_phone)}</td><td>${esc(job.status)}</td><td>${esc(body)}${err}</td></tr>`;
+      }).join('') + '</tbody></table>';
+  } catch (e) {
+    wrap.innerHTML = esc(e.message);
   }
 }
 
