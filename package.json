@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "provision:supabase": "node scripts/provision-reply-handler-supabase.mjs",
+    "migrate:railway": "node scripts/apply-railway-migrations.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",

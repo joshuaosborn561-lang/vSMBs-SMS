@@ -2,3 +2,4 @@ node_modules/
 .env
 keys_*_temp_secrets.json
 supabase/.temp/
+.supabase/

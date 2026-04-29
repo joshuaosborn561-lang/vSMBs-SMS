@@ -15,6 +15,20 @@ HeyReach Webhook ──┘                            │
 
 ## Setup
 
+### Railway Postgres + Supabase (SMS campaigns)
+
+- **Railway:** App service needs `DATABASE_URL` from the Postgres plugin. Apply incremental migrations with tracking:
+  ```bash
+  export RAILWAY_TOKEN=... RAILWAY_PROJECT_ID=... RAILWAY_ENVIRONMENT_ID=... POSTGRES_SERVICE_ID=...  # Postgres plugin service id
+  npm run migrate:railway
+  ```
+  New databases may need `RAILWAY_MIGRATIONS_FROM=6` once if legacy migrations already exist locally only — see `scripts/apply-railway-migrations.mjs`.
+- **Supabase (prospects / campaign log / Gmail mirror):** dedicated project, **not** your CRM DB.
+  ```bash
+  npx supabase login
+  npm run provision:supabase   # creates project, applies supabase/schema-reference.sql, sets Railway SUPABASE_*
+  ```
+
 ### 1. Provision the Database
 
 Create a Postgres database and run the schema:

@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
  * Fetches Postgres DATABASE_PUBLIC_URL from Railway GraphQL, runs migrations/*.sql in order.
- * Env: RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID, and POSTGRES_SERVICE_ID (default: b5ff0c23-b9b4-4e92-bbdc-a82e82d93e0e for vSMBs-SMS)
+ * Env: RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID, POSTGRES_SERVICE_ID (optional default legacy id)
+ *
+ * Existing Railway DBs often already have early migrations applied — running 002+ again fails.
+ * Set RAILWAY_MIGRATIONS_FROM=6 (numeric prefix) to skip applying older files and seed them as "done".
+ * Example: RAILWAY_MIGRATIONS_FROM=6 node scripts/apply-railway-migrations.mjs
  */
 import fs from 'fs';
 import path from 'path';
@@ -14,6 +18,7 @@ const token = process.env.RAILWAY_TOKEN;
 const projectId = process.env.RAILWAY_PROJECT_ID;
 const environmentId = process.env.RAILWAY_ENVIRONMENT_ID;
 const postgresServiceId = process.env.POSTGRES_SERVICE_ID || 'b5ff0c23-b9b4-4e92-bbdc-a82e82d93e0e';
+const migrationsFrom = process.env.RAILWAY_MIGRATIONS_FROM;
 
 if (!token || !projectId || !environmentId) {
   console.error('Missing RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID');
@@ -53,10 +58,47 @@ const client = new pg.Client({
 });
 await client.connect();
 console.log('[migrations] connected (public proxy)');
+
+await client.query(`
+CREATE TABLE IF NOT EXISTS railway_schema_migrations (
+  filename TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+)`);
+
+const minVer = migrationsFrom != null && migrationsFrom !== ''
+  ? parseInt(migrationsFrom, 10)
+  : null;
+
 for (const f of files) {
+  const verMatch = f.match(/^(\d+)/);
+  const ver = verMatch ? parseInt(verMatch[1], 10) : 0;
+
+  if (minVer !== null && !Number.isNaN(minVer) && ver < minVer) {
+    await client.query(
+      `INSERT INTO railway_schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`,
+      [f]
+    );
+    console.log('[migrations] skip (RAILWAY_MIGRATIONS_FROM seed)', f);
+    continue;
+  }
+
+  const { rows: done } = await client.query(
+    'SELECT 1 FROM railway_schema_migrations WHERE filename = $1',
+    [f]
+  );
+  if (done.length) {
+    console.log('[migrations] skip (already applied)', f);
+    continue;
+  }
+
   const sql = fs.readFileSync(path.join(dir, f), 'utf8');
   console.log('[migrations] applying', f);
   await client.query(sql);
+  await client.query(
+    'INSERT INTO railway_schema_migrations (filename) VALUES ($1)',
+    [f]
+  );
 }
+
 await client.end();
-console.log('[migrations] ok', files.length, 'files');
+console.log('[migrations] ok', files.length, 'files considered');
