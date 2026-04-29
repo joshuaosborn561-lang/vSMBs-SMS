@@ -210,10 +210,12 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       return res.status(200).json({ ok: true, intent, replyId: reply.id });
     }
 
-    // positive
+    // positive — no Slack; auto follow-up after delay; log inbound to sheet now
     if (sheetRow) {
       await sheets.updateProspectByHeaders(client.google_sheet_id, prospectTab, sheetRow, headers, {
+        reply: inboundMessage,
         intent: 'positive',
+        sent_status: 'awaiting_free_site_prompt',
       });
     }
 
@@ -240,7 +242,10 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
             prospectTab,
             sheetRow,
             headers,
-            { customer_status: 'free_site_prompt_sent' }
+            {
+              customer_status: 'free_site_prompt_sent',
+              sent_status: 'free_site_prompt_sent',
+            }
           );
         }
 
@@ -261,6 +266,15 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
         console.log('[Webhook SMS] Sent free-site follow-up', { phone: phoneDisplay });
       } catch (err) {
         console.error('[Webhook SMS] Delayed send failed', err.message);
+        try {
+          await slack.postSmsAutomationFailed(client.slack_bot_token, client.slack_channel_id, {
+            phone: phoneDisplay,
+            businessName: businessName || 'Unknown',
+            error: err.message,
+          });
+        } catch (e) {
+          console.error('[Webhook SMS] Failed to post Slack alert for send failure', e.message);
+        }
       }
     }, 20000);
 

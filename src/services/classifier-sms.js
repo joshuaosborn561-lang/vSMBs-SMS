@@ -4,6 +4,20 @@ const MODEL = 'gpt-4o-mini';
 
 const INTENTS = ['positive', 'negative', 'question', 'unclassifiable'];
 
+/** Strong signals they do NOT have a site (should trigger silent auto follow-up, not Slack). */
+function looksLikeNoWebsiteConfirmation(text) {
+  const t = String(text || '').toLowerCase();
+  if (!t.trim()) return false;
+  if (/\bno\s+website\b/.test(t)) return true;
+  if (/\bwe\s+don'?t\s+have\s+(a\s+)?(website|web\s*site|site)\b/.test(t)) return true;
+  if (/\bno\s+we\s+don'?t\s+have\b/.test(t) && /(website|web\s*site|site)/.test(t)) return true;
+  if (/\bdon'?t\s+have\s+(a\s+)?(website|web\s*site|site)\b/.test(t)) return true;
+  if (/\bno\s*,?\s*we\s+don'?t\b/.test(t) && /(website|site)\b/.test(t)) return true;
+  if (/\bnever\s+got\s+(around\s+to\s+)?(a\s+)?(website|site)\b/.test(t)) return true;
+  if (/\bno\s+(site|web)\b/.test(t)) return true;
+  return false;
+}
+
 let client;
 
 function getOpenAI() {
@@ -23,7 +37,7 @@ async function classifySmsIntent(inboundMessage, contextLines) {
   const system = `You classify SMS replies from small local businesses (plumbers, HVAC, roofers, cleaners) who were cold-texted about not having a website.
 
 Categories (exactly one):
-- positive — they confirm they have no website, want help, or show interest in a site
+- positive — they confirm they have no website, want help, or show interest in a site. Examples: "no we don't have a website", "no website", "we don't have a site", "never built one" — all positive.
 - negative — not interested, already have a website, or ask to stop / unsubscribe
 - question — they asked something that needs a human (pricing, details, who is this, etc.)
 - unclassifiable — ambiguous, unclear, or off-topic noise
@@ -35,6 +49,13 @@ ${ctx || '(none)'}
 
 Their latest SMS:
 ${inboundMessage}`;
+
+  if (looksLikeNoWebsiteConfirmation(inboundMessage)) {
+    return {
+      intent: 'positive',
+      reasoning: 'Matched explicit no-website confirmation phrasing.',
+    };
+  }
 
   const openai = getOpenAI();
   const completion = await openai.chat.completions.create({
@@ -59,6 +80,10 @@ ${inboundMessage}`;
 
   let intent = String(parsed.intent || '').toLowerCase();
   if (!INTENTS.includes(intent)) intent = 'unclassifiable';
+
+  if (intent !== 'positive' && looksLikeNoWebsiteConfirmation(inboundMessage)) {
+    intent = 'positive';
+  }
 
   return {
     intent,
@@ -94,4 +119,10 @@ async function classifyAffirmative(inboundMessage) {
   }
 }
 
-module.exports = { classifySmsIntent, classifyAffirmative, SMS_INTENTS: INTENTS, SMS_MODEL: MODEL };
+module.exports = {
+  classifySmsIntent,
+  classifyAffirmative,
+  looksLikeNoWebsiteConfirmation,
+  SMS_INTENTS: INTENTS,
+  SMS_MODEL: MODEL,
+};

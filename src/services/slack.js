@@ -219,6 +219,28 @@ async function postSmsFollowupAlert(token, channelId, payload) {
   });
 }
 
+async function postSmsAutomationFailed(token, channelId, { phone, businessName, error }) {
+  const slack = getClient(token);
+  return slack.chat.postMessage({
+    channel: channelId,
+    text: `SMS auto follow-up failed for ${phone}: ${error}`,
+    blocks: [
+      { type: 'header', text: { type: 'plain_text', text: '⚠️ SMS send failed' } },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Phone:* ${phone}\n*Business:* ${businessName || '—'}\n*Error:* ${String(error).slice(0, 500)}`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: 'The free-site prompt was not delivered. Fix gateway config or send manually.' }],
+      },
+    ],
+  });
+}
+
 async function postGmailInbound(token, channelId, { notificationId, senderName, senderEmail, subject, body }) {
   const slack = getClient(token);
   const meta = JSON.stringify({ notificationId });
@@ -326,5 +348,6 @@ module.exports = {
   postSmsEscalation,
   postSmsFollowupAlert,
   postGmailInbound,
+  postSmsAutomationFailed,
   openSmsReplyModal,
 };
