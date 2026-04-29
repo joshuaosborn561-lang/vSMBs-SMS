@@ -19,11 +19,24 @@ async function computeDelayMsSinceLastOutbound(clientId, leadPhone) {
 }
 
 async function logInbound({ clientId, leadPhone, body, variables }) {
-  await db.query(
+  const { rows: [row] } = await db.query(
     `INSERT INTO sms_message_log
       (client_id, lead_phone, direction, body, template_key, variables, status, sent_at)
-     VALUES ($1, $2, 'inbound', $3, NULL, $4::jsonb, 'sent', now())`,
+     VALUES ($1, $2, 'inbound', $3, NULL, $4::jsonb, 'sent', now()) RETURNING id`,
     [clientId, leadPhone, body, JSON.stringify(variables || {})]
+  );
+  return row?.id;
+}
+
+async function updateInboundMeta(logId, { sentimentLabel, sentimentScore, stopRequest }) {
+  if (!logId) return;
+  await db.query(
+    `UPDATE sms_message_log SET
+       sentiment_label = $2,
+       sentiment_score = $3,
+       stop_request = $4
+     WHERE id = $1`,
+    [logId, sentimentLabel ?? null, sentimentScore ?? null, !!stopRequest]
   );
 }
 
@@ -113,6 +126,7 @@ async function listLog(clientId, limit = 100) {
 
 module.exports = {
   logInbound,
+  updateInboundMeta,
   logOutboundScheduled,
   logOutboundSent,
   logOutboundFailed,

@@ -1,7 +1,12 @@
 const { Router } = require('express');
+const multer = require('multer');
 const smsCampaign = require('../services/sms-campaign');
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 function dashboardSecretOk(req) {
   const secret = (process.env.DASHBOARD_ACTION_SECRET || process.env.WEBHOOK_TEST_SECRET || '').trim();
@@ -53,10 +58,22 @@ router.patch('/admin/sms/campaign/:clientId/:campaignId', async (req, res) => {
     return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
   }
   try {
+    const body = { ...(req.body || {}) };
+    [
+      'max_sends_per_day',
+      'max_new_enrollments_per_day',
+      'min_gap_between_sends_ms',
+    ].forEach((k) => {
+      if (body[k] === '' || body[k] === null) body[k] = null;
+      else if (body[k] !== undefined) {
+        const n = parseInt(body[k], 10);
+        body[k] = Number.isFinite(n) ? n : null;
+      }
+    });
     const camp = await smsCampaign.updateCampaign(
       req.params.clientId,
       req.params.campaignId,
-      req.body || {}
+      body
     );
     if (!camp) return res.status(404).json({ error: 'Campaign not found' });
     res.json(camp);
@@ -137,6 +154,122 @@ router.get('/admin/sms/campaign/:clientId/:campaignId/jobs', async (req, res) =>
     res.json({ jobs: rows });
   } catch (err) {
     console.error('[SMS Campaign] jobs', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/admin/sms/transitions/:clientId', async (req, res) => {
+  try {
+    const transitions = await smsCampaign.listTransitions(req.params.clientId);
+    res.json({ transitions });
+  } catch (err) {
+    console.error('[SMS Campaign] transitions list', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/admin/sms/transition/:clientId', async (req, res) => {
+  if (!dashboardSecretOk(req)) {
+    return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
+  }
+  try {
+    await smsCampaign.upsertTransition(req.params.clientId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[SMS Campaign] transition upsert', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/admin/sms/transition/:clientId/:sourceCampaignId/:triggerIntent', async (req, res) => {
+  if (!dashboardSecretOk(req)) {
+    return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
+  }
+  try {
+    await smsCampaign.deleteTransition(
+      req.params.clientId,
+      req.params.sourceCampaignId,
+      req.params.triggerIntent
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[SMS Campaign] transition delete', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** CSV upload → staged leads (phone column required); merges extra columns into variables */
+router.post('/admin/sms/staged-leads/:clientId/csv', upload.single('file'), async (req, res) => {
+  if (!dashboardSecretOk(req)) {
+    return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
+  }
+  try {
+    const buf = req.file?.buffer;
+    if (!buf || !buf.length) return res.status(400).json({ error: 'file required (multipart field: file)' });
+    const text = buf.toString('utf8');
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) return res.json({ imported: 0 });
+
+    const rawHeader = lines[0].split(',').map((s) => s.trim().replace(/^"|"$/g, '').toLowerCase());
+    const hasHeader = rawHeader.some((h) => h === 'phone' || h === 'phone_number' || h === 'mobile');
+    const headerRow = hasHeader ? rawHeader : null;
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+
+    const normKey = (k) => String(k || '').trim().toLowerCase().replace(/\s+/g, '_');
+
+    const rows = [];
+    for (const line of dataLines) {
+      const cells = [];
+      let cur = '';
+      let inQ = false;
+      for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (ch === '"') inQ = !inQ;
+        else if (ch === ',' && !inQ) {
+          cells.push(cur.trim());
+          cur = '';
+        } else cur += ch;
+      }
+      cells.push(cur.trim());
+
+      let phoneIdx = 0;
+      if (headerRow) {
+        phoneIdx = headerRow.findIndex((h) => h === 'phone' || h === 'phone_number' || h === 'mobile');
+        if (phoneIdx < 0) phoneIdx = 0;
+      }
+      const phone = cells[phoneIdx] ? cells[phoneIdx].replace(/^"|"$/g, '').trim() : '';
+      if (!phone) continue;
+
+      const obj = { phone };
+      if (headerRow) {
+        headerRow.forEach((h, i) => {
+          if (i === phoneIdx) return;
+          const k = normKey(h);
+          if (!k) return;
+          if (cells[i] != null && cells[i] !== '') obj[k] = cells[i].replace(/^"|"$/g, '').trim();
+        });
+      }
+      rows.push(obj);
+    }
+
+    const out = await smsCampaign.importStagedLeads(
+      req.params.clientId,
+      rows,
+      req.query.source_label || ''
+    );
+    res.json(out);
+  } catch (err) {
+    console.error('[SMS Campaign] csv import', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/admin/sms/staged-leads/:clientId', async (req, res) => {
+  try {
+    const rows = await smsCampaign.listStagedLeads(req.params.clientId, req.query.limit);
+    res.json({ leads: rows });
+  } catch (err) {
+    console.error('[SMS Campaign] staged list', err.message);
     res.status(500).json({ error: err.message });
   }
 });

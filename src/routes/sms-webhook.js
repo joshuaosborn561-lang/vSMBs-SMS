@@ -1,9 +1,15 @@
 const { Router } = require('express');
 const db = require('../db');
 const sheets = require('../services/sheets');
-const { classifySmsIntent, classifyAffirmative } = require('../services/classifier-sms');
+const {
+  classifySmsIntent,
+  classifyAffirmative,
+  classifyInboundSentimentAndStop,
+  looksLikeStopOrUnsubscribe,
+} = require('../services/classifier-sms');
 const slack = require('../services/slack');
 const smsLog = require('../services/sms-log');
+const smsCampaign = require('../services/sms-campaign');
 const { renderSmsTemplate } = require('../utils/sms-template');
 
 const router = Router();
@@ -48,26 +54,27 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       return res.status(200).json({ ok: true, skipped: true });
     }
 
-    if (!client.google_sheet_id) {
-      console.warn('[Webhook SMS] No google_sheet_id on client', { clientId });
-      return res.status(200).json({ ok: true, skipped: true, reason: 'no_sheet' });
-    }
-
     const prospectTab = client.sheet_tab_prospects || 'Prospects';
     const dncTab = client.sheet_tab_dnc || 'DNC';
 
-    const dncKeys = await sheets.loadDncPhoneKeys(client.google_sheet_id, dncTab);
+    const dncKeys = client.google_sheet_id
+      ? await sheets.loadDncPhoneKeys(client.google_sheet_id, dncTab)
+      : new Set();
     const keys = sheets.phoneMatchKeys(rawPhone);
     if (keys.some((k) => dncKeys.has(k))) {
       console.log('[Webhook SMS] Number on DNC list — ignoring', { rawPhone });
       return res.status(200).json({ ok: true, skipped: true, reason: 'dnc' });
     }
 
-    const { row: sheetRow, headers, rowData } = await sheets.findProspectRow(
-      client.google_sheet_id,
-      prospectTab,
-      rawPhone
-    );
+    let sheetRow = null;
+    let headers = {};
+    let rowData = null;
+    if (client.google_sheet_id) {
+      const found = await sheets.findProspectRow(client.google_sheet_id, prospectTab, rawPhone);
+      sheetRow = found.row;
+      headers = found.headers || {};
+      rowData = found.rowData;
+    }
 
     const businessName = rowData ? getCell(headers, rowData, 'business_name', 'business name') : '';
     const vertical = rowData ? getCell(headers, rowData, 'vertical') : '';
@@ -81,8 +88,9 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
 
     const phoneDisplay = canonicalPhone(rawPhone, keys);
 
+    let inboundLogId;
     try {
-      await smsLog.logInbound({
+      inboundLogId = await smsLog.logInbound({
         clientId,
         leadPhone: phoneDisplay,
         body: inboundMessage,
@@ -90,6 +98,53 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       });
     } catch (e) {
       console.warn('[Webhook SMS] sms log inbound skipped', e.message);
+    }
+
+    let sentiment = null;
+    try {
+      sentiment = await classifyInboundSentimentAndStop(inboundMessage);
+      if (inboundLogId) {
+        await smsLog.updateInboundMeta(inboundLogId, {
+          sentimentLabel: sentiment.sentiment_label,
+          sentimentScore: sentiment.sentiment_score,
+          stopRequest: sentiment.stop_request,
+        });
+      }
+    } catch (e) {
+      console.warn('[Webhook SMS] sentiment skipped', e.message);
+    }
+
+    const stopDetected =
+      sentiment?.stop_request ||
+      looksLikeStopOrUnsubscribe(inboundMessage);
+
+    if (stopDetected) {
+      await smsCampaign.cancelJobsForPhone(clientId, phoneDisplay, 'stop_or_unsubscribe');
+      if (client.google_sheet_id) {
+        await sheets.appendDnc(client.google_sheet_id, dncTab, {
+          phone: phoneDisplay,
+          reason: 'stop_unsubscribe_auto',
+        });
+        if (sheetRow) {
+          await sheets.updateProspectByHeaders(
+            client.google_sheet_id,
+            prospectTab,
+            sheetRow,
+            headers,
+            {
+              reply: inboundMessage,
+              intent: 'stop',
+              customer_status: 'dnc',
+              dnc: 'yes',
+            }
+          );
+        }
+      }
+      return res.status(200).json({
+        ok: true,
+        path: 'auto_dnc_stop',
+        sentiment: sentiment?.sentiment_label,
+      });
     }
 
     // ─── Stage: awaiting ack after free-site prompt ───────────────────
@@ -164,7 +219,22 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       reasoning = err.message;
     }
 
-    if (sheetRow) {
+    try {
+      const br = await smsCampaign.handleInboundBranch(clientId, phoneDisplay, intent);
+      if (br.branched) {
+        return res.status(200).json({
+          ok: true,
+          intent,
+          branched: true,
+          target_campaign_id: br.target_campaign_id,
+          enroll: br.enroll,
+        });
+      }
+    } catch (e) {
+      console.warn('[Webhook SMS] branch handler', e.message);
+    }
+
+    if (client.google_sheet_id && sheetRow) {
       const log = { reply: inboundMessage, intent };
       if (intent === 'negative') log.customer_status = 'dnc';
       await sheets.updateProspectByHeaders(
@@ -177,19 +247,22 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
     }
 
     if (intent === 'negative') {
-      await sheets.appendDnc(client.google_sheet_id, dncTab, {
-        phone: phoneDisplay,
-        reason: 'negative_sms',
-      });
-      if (sheetRow) {
-        await sheets.updateProspectByHeaders(
-          client.google_sheet_id,
-          prospectTab,
-          sheetRow,
-          headers,
-          { customer_status: 'dnc', dnc: 'yes' }
-        );
+      if (client.google_sheet_id) {
+        await sheets.appendDnc(client.google_sheet_id, dncTab, {
+          phone: phoneDisplay,
+          reason: 'negative_sms',
+        });
+        if (sheetRow) {
+          await sheets.updateProspectByHeaders(
+            client.google_sheet_id,
+            prospectTab,
+            sheetRow,
+            headers,
+            { customer_status: 'dnc', dnc: 'yes' }
+          );
+        }
       }
+      await smsCampaign.cancelJobsForPhone(clientId, phoneDisplay, 'intent_negative');
       return res.status(200).json({ ok: true, intent: 'negative' });
     }
 

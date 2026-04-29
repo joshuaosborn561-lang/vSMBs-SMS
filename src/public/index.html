@@ -1155,9 +1155,10 @@ function openDetail(id) {
 
     <div class="detail-section">
       <h4>SMS sequences</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
-        Build multi-step outbound SMS like SmartLead: upload phones (CSV or one per line), define steps with <code>{{placeholders}}</code> matching your sheet columns,
-        preview rendered copy, then enroll to queue sends. Delays are <strong>after</strong> each step before the next (step 1 sends immediately on enroll).
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
+        Build multi-step outbound SMS: <strong>schedule</strong> (timezone, send window, daily caps), <strong>staged CSV</strong> (extra variables when sheet has no row),
+        <strong>branching</strong> (on reply intent, move lead to another campaign), and <code>{{placeholders}}</code> from the Google Sheet and/or staged fields.
+        Inbound messages get <strong>sentiment</strong> (gpt-4.1-nano) in the log; <strong>STOP / unsubscribe</strong> auto-DNCs and cancels queued campaign texts.
       </p>
       <div class="sms-cockpit sms-campaign-ui">
         <div class="sms-campaign-bar">
@@ -1181,11 +1182,55 @@ function openDetail(id) {
             </div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpSaveMeta('${c.id}')">Save name &amp; status</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpSaveMeta('${c.id}')">Save name, schedule &amp; caps</button>
             <button type="button" class="btn btn-primary btn-sm" onclick="smsCpSaveSteps('${c.id}')">Save sequence steps</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpAddStep('${c.id}')">+ Add step</button>
           </div>
+          <div class="sms-schedule-box" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+            <h5 style="font-size:12px;color:var(--accent-light);margin-bottom:8px">Send window &amp; pacing</h5>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+              <div><label style="font-size:11px;color:var(--text-muted)">Timezone (IANA)</label>
+                <input type="text" id="sms_cp_timezone_${c.id}" placeholder="America/New_York" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:var(--text-muted)">Window start</label>
+                <input type="text" id="sms_cp_sched_start_${c.id}" placeholder="09:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:var(--text-muted)">Window end</label>
+                <input type="text" id="sms_cp_sched_end_${c.id}" placeholder="17:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:var(--text-muted)">Min gap between sends (ms)</label>
+                <input type="number" id="sms_cp_min_gap_${c.id}" min="0" step="1000" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:var(--text-muted)">Max sends / day (blank = none)</label>
+                <input type="number" id="sms_cp_max_send_day_${c.id}" min="1" placeholder="∞" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:var(--text-muted)">Max new enrolls / day</label>
+                <input type="number" id="sms_cp_max_enroll_day_${c.id}" min="1" placeholder="∞" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+            </div>
+            <div style="margin-top:10px;font-size:11px;color:var(--text-muted)">Send on weekdays (Luxon: Mon=1 … Sun=7)</div>
+            <div id="sms_cp_dow_${c.id}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--text-muted)">
+              <input type="checkbox" id="sms_cp_exclude_other_${c.id}" checked> Exclude phones already in another <strong>active</strong> campaign
+            </label>
+          </div>
           <div id="sms_cp_steps_${c.id}"></div>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Staged leads (CSV upload)</h5>
+          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Columns become <code>{{snake_case}}</code> variables merged over sheet data. Requires a <code>phone</code> column.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+            <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count staged</button>
+          </div>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Reply branching (this campaign → other)</h5>
+          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">When an inbound SMS is classified, cancel this campaign for that phone and enroll them in the target campaign.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px">
+            <div><label style="font-size:11px;color:var(--text-muted)">Target campaign</label>
+              <select id="sms_cp_branch_target_${c.id}" style="min-width:180px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></select></div>
+            <div><label style="font-size:11px;color:var(--text-muted)">When intent is</label>
+              <select id="sms_cp_branch_trigger_${c.id}" style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px">
+                <option value="positive">positive</option>
+                <option value="negative">negative</option>
+                <option value="question">question</option>
+                <option value="unclassifiable">unclassifiable</option>
+              </select></div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpAddBranch('${c.id}')">Add rule</button>
+          </div>
+          <div id="sms_cp_transitions_${c.id}" style="font-size:11px;margin-bottom:12px"></div>
           <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Lead list (phones)</h5>
           <textarea class="sms-cp-csv" id="sms_cp_phones_${c.id}" placeholder="+15551234567&#10;+15559876543&#10;Or CSV: phone,business_name,city"></textarea>
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
@@ -1401,15 +1446,18 @@ async function loadSmsLog(clientId) {
       wrap.innerHTML = '<div style="opacity:0.5;font-size:12px">No SMS logged yet.</div>';
       return;
     }
-    wrap.innerHTML = '<table class="sms-log-table"><thead><tr><th>When</th><th>Dir</th><th>Phone</th><th>Gap</th><th>Status</th><th>Message</th></tr></thead><tbody>' +
+    wrap.innerHTML = '<table class="sms-log-table"><thead><tr><th>When</th><th>Dir</th><th>Phone</th><th>Gap</th><th>Sentiment</th><th>Status</th><th>Message</th></tr></thead><tbody>' +
       rows.map(r => {
         const t = new Date(r.created_at).toLocaleString();
         const dir = r.direction === 'inbound' ? 'in' : 'out';
         const cls = r.direction === 'inbound' ? 'in' : 'out';
         const gap = r.direction === 'outbound' ? formatDelayMs(r.delay_ms_since_previous_outbound) : '—';
         const st = esc(r.status || '');
+        const sent = (r.direction === 'inbound' && r.sentiment_label)
+          ? esc(r.sentiment_label) + (r.sentiment_score != null ? ' (' + Number(r.sentiment_score).toFixed(2) + ')' : '') + (r.stop_request ? ' · stop' : '')
+          : '—';
         const err = r.error_message ? '<div style="color:var(--red);font-size:11px">' + esc(r.error_message) + '</div>' : '';
-        return `<tr><td>${t}</td><td><span class="sms-log-dir ${cls}">${dir}</span></td><td>${esc(r.lead_phone)}</td><td class="sms-delay">${esc(gap)}</td><td>${st}</td><td>${esc(r.body)}${err}</td></tr>`;
+        return `<tr><td>${t}</td><td><span class="sms-log-dir ${cls}">${dir}</span></td><td>${esc(r.lead_phone)}</td><td class="sms-delay">${esc(gap)}</td><td style="font-size:11px">${sent}</td><td>${st}</td><td>${esc(r.body)}${err}</td></tr>`;
       }).join('') + '</tbody></table>';
   } catch (e) {
     wrap.innerHTML = '<div style="color:var(--red);font-size:12px">' + esc(e.message) + '</div>';
@@ -1490,6 +1538,26 @@ function smsCpOnSelect(clientId) {
   smsCpLoadCampaign(clientId, id);
 }
 
+function smsCpRenderDow(clientId, selectedDays) {
+  const wrap = document.getElementById(`sms_cp_dow_${clientId}`);
+  if (!wrap) return;
+  const sel = new Set((selectedDays && selectedDays.length) ? selectedDays.map(Number) : [1, 2, 3, 4, 5]);
+  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  wrap.innerHTML = labels.map((lb, i) => {
+    const d = i + 1;
+    const ck = sel.has(d) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:4px;font-size:12px"><input type="checkbox" class="sms_cp_dow_cb" value="${d}" ${ck}> ${lb}</label>`;
+  }).join('');
+}
+
+function smsCpCollectDow(clientId) {
+  const wrap = document.getElementById(`sms_cp_dow_${clientId}`);
+  if (!wrap) return [1, 2, 3, 4, 5];
+  const days = [];
+  wrap.querySelectorAll('.sms_cp_dow_cb:checked').forEach((cb) => days.push(Number(cb.value)));
+  return days.length ? days.sort((a, b) => a - b) : [1, 2, 3, 4, 5];
+}
+
 async function smsCpLoadCampaign(clientId, campaignId) {
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${campaignId}`);
@@ -1498,9 +1566,123 @@ async function smsCpLoadCampaign(clientId, campaignId) {
     smsCpEnsureStore(clientId).detail = c;
     document.getElementById(`sms_cp_name_${clientId}`).value = c.name || '';
     document.getElementById(`sms_cp_active_${clientId}`).checked = !!c.active;
+    document.getElementById(`sms_cp_timezone_${clientId}`).value = c.timezone || 'America/New_York';
+    document.getElementById(`sms_cp_sched_start_${clientId}`).value = c.schedule_start || '09:00';
+    document.getElementById(`sms_cp_sched_end_${clientId}`).value = c.schedule_end || '17:00';
+    document.getElementById(`sms_cp_min_gap_${clientId}`).value = c.min_gap_between_sends_ms != null ? c.min_gap_between_sends_ms : 0;
+    document.getElementById(`sms_cp_max_send_day_${clientId}`).value = c.max_sends_per_day != null ? c.max_sends_per_day : '';
+    document.getElementById(`sms_cp_max_enroll_day_${clientId}`).value = c.max_new_enrollments_per_day != null ? c.max_new_enrollments_per_day : '';
+    document.getElementById(`sms_cp_exclude_other_${clientId}`).checked = c.exclude_other_campaigns !== false;
+    smsCpRenderDow(clientId, c.schedule_days);
     const steps = (c.steps && c.steps.length) ? c.steps : [{ sort_order: 1, body_template: 'Hi {{business_name}} — quick question about your site.', delay_after_ms: 86400000 }];
     smsCpRenderSteps(clientId, steps);
     smsCpLoadJobs(clientId);
+    smsCpPopulateBranchTargets(clientId, campaignId);
+    smsCpLoadTransitions(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function smsCpPopulateBranchTargets(clientId, excludeId) {
+  const sel = document.getElementById(`sms_cp_branch_target_${clientId}`);
+  if (!sel) return;
+  const list = smsCpEnsureStore(clientId).list || [];
+  sel.innerHTML = '<option value="">— pick campaign —</option>' +
+    list.filter(x => x.id !== excludeId).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+}
+
+async function smsCpLoadTransitions(clientId) {
+  const wrap = document.getElementById(`sms_cp_transitions_${clientId}`);
+  if (!wrap) return;
+  try {
+    const res = await fetch(`${API}/admin/sms/transitions/${clientId}`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    const cid = smsCpEnsureStore(clientId).campaignId;
+    const rows = (j.transitions || []).filter(t => t.source_campaign_id === cid);
+    if (!rows.length) {
+      wrap.innerHTML = '<span style="opacity:0.6">No branch rules for this campaign.</span>';
+      return;
+    }
+    wrap.innerHTML = rows.map(t =>
+      `<div style="margin:4px 0">When <strong>${esc(t.trigger_intent)}</strong> → <strong>${esc(t.target_name || '')}</strong> ` +
+      `<button type="button" class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:10px" onclick="smsCpDeleteBranch('${clientId}','${t.source_campaign_id}','${t.trigger_intent}')">Remove</button></div>`
+    ).join('');
+  } catch (e) {
+    wrap.textContent = e.message;
+  }
+}
+
+async function smsCpAddBranch(clientId) {
+  const secret = smsCpGetSecret(clientId);
+  const sourceId = smsCpEnsureStore(clientId).campaignId;
+  const targetId = document.getElementById(`sms_cp_branch_target_${clientId}`)?.value;
+  const trigger = document.getElementById(`sms_cp_branch_trigger_${clientId}`)?.value;
+  if (!secret || !sourceId || !targetId) { toast('Select campaigns and enter secret', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  try {
+    const res = await fetch(`${API}/admin/sms/transition/${clientId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      body: JSON.stringify({ source_campaign_id: sourceId, target_campaign_id: targetId, trigger_intent: trigger }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    toast('Branch rule saved', 'success');
+    smsCpLoadTransitions(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function smsCpDeleteBranch(clientId, sourceId, triggerIntent) {
+  const secret = smsCpGetSecret(clientId);
+  if (!secret) { toast('Enter secret', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  try {
+    const res = await fetch(`${API}/admin/sms/transition/${clientId}/${sourceId}/${encodeURIComponent(triggerIntent)}`, {
+      method: 'DELETE',
+      headers: { 'x-dashboard-secret': secret },
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    smsCpLoadTransitions(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function smsCpUploadCsv(clientId) {
+  const secret = smsCpGetSecret(clientId);
+  if (!secret) { toast('Enter action secret', 'error'); return; }
+  const input = document.getElementById(`sms_cp_csv_file_${clientId}`);
+  const file = input && input.files && input.files[0];
+  if (!file) { toast('Choose a CSV file', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch(`${API}/admin/sms/staged-leads/${clientId}/csv?source_label=dashboard`, {
+      method: 'POST',
+      headers: { 'x-dashboard-secret': secret },
+      body: fd,
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Upload failed');
+    toast(`Imported ${j.imported} staged rows`, 'success');
+    input.value = '';
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function smsCpStagedCount(clientId) {
+  try {
+    const res = await fetch(`${API}/admin/sms/staged-leads/${clientId}?limit=5000`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    toast(`${(j.leads || []).length} staged phone(s)`, 'success');
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -1587,6 +1769,7 @@ async function smsCpNewCampaign(clientId) {
     const row = await res.json();
     if (!res.ok) throw new Error(row.error || 'Create failed');
     await smsCpReloadList(clientId);
+    smsCpPopulateBranchTargets(clientId, row.id);
     const sel = document.getElementById(`sms_cp_select_${clientId}`);
     if (sel) { sel.value = row.id; }
     smsCpEnsureStore(clientId).campaignId = row.id;
@@ -1613,16 +1796,29 @@ async function smsCpSaveMeta(clientId) {
   sessionStorage.setItem('sms_action_secret', secret);
   const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Campaign';
   const active = document.getElementById(`sms_cp_active_${clientId}`).checked;
+  const payload = {
+    name,
+    active,
+    timezone: document.getElementById(`sms_cp_timezone_${clientId}`)?.value?.trim() || 'America/New_York',
+    schedule_start: document.getElementById(`sms_cp_sched_start_${clientId}`)?.value?.trim() || '09:00',
+    schedule_end: document.getElementById(`sms_cp_sched_end_${clientId}`)?.value?.trim() || '17:00',
+    schedule_days: smsCpCollectDow(clientId),
+    min_gap_between_sends_ms: parseInt(document.getElementById(`sms_cp_min_gap_${clientId}`)?.value, 10) || 0,
+    max_sends_per_day: (() => { const v = document.getElementById(`sms_cp_max_send_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
+    max_new_enrollments_per_day: (() => { const v = document.getElementById(`sms_cp_max_enroll_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
+    exclude_other_campaigns: document.getElementById(`sms_cp_exclude_other_${clientId}`)?.checked !== false,
+  };
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
-      body: JSON.stringify({ name, active }),
+      body: JSON.stringify(payload),
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Save failed');
     toast('Saved', 'success');
     smsCpReloadList(clientId);
+    await smsCpLoadCampaign(clientId, id);
   } catch (e) {
     toast(e.message, 'error');
   }
