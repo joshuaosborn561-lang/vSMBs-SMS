@@ -26,7 +26,6 @@ router.post('/admin/clients', async (req, res) => {
       slack_channel_id, booking_link, calendly_personal_access_token, voice_prompt,
       google_sheet_id, sheet_tab_prospects, sheet_tab_dnc, sheet_tab_settings,
       sheet_tab_email_log, settings_last_email_check_cell,
-      sms_gateway_url, sms_gateway_api_key,
     } = req.body;
 
     if (!name || !slack_bot_token || !slack_channel_id) {
@@ -38,10 +37,9 @@ router.post('/admin/clients', async (req, res) => {
         name, smartlead_api_key, heyreach_api_key, slack_bot_token, slack_channel_id,
         booking_link, calendly_personal_access_token, voice_prompt,
         google_sheet_id, sheet_tab_prospects, sheet_tab_dnc, sheet_tab_settings,
-        sheet_tab_email_log, settings_last_email_check_cell,
-        sms_gateway_url, sms_gateway_api_key
+        sheet_tab_email_log, settings_last_email_check_cell
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
       [
         name,
         smartlead_api_key || null,
@@ -57,8 +55,6 @@ router.post('/admin/clients', async (req, res) => {
         sheet_tab_settings || null,
         sheet_tab_email_log || null,
         settings_last_email_check_cell || null,
-        sms_gateway_url || null,
-        sms_gateway_api_key || null,
       ]
     );
 
@@ -91,7 +87,7 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
       'slack_channel_id', 'booking_link', 'calendly_personal_access_token', 'voice_prompt', 'active',
       'google_sheet_id', 'sheet_tab_prospects', 'sheet_tab_dnc', 'sheet_tab_settings',
       'sheet_tab_email_log', 'settings_last_email_check_cell',
-      'sms_gateway_url', 'sms_gateway_api_key', 'gmail_watcher_started_at',
+      'gmail_watcher_started_at',
     ];
 
     const updates = [];

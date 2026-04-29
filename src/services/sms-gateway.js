@@ -1,37 +1,40 @@
 /**
- * Outbound SMS via your HTTP gateway (Android SMS Gateway or compatible).
- * Configure per client: sms_gateway_url, sms_gateway_api_key.
+ * Outbound SMS via SMSMobileAPI (smsmobileapi.com).
+ * API key: Railway env SMSMOBILEAPI_KEY
+ * @see https://api.smsmobileapi.com/sendsms/
  */
-async function sendSms({ baseUrl, apiKey, to, body }) {
-  if (!baseUrl) throw new Error('sms_gateway_url not configured for client');
-  const url = baseUrl.replace(/\/$/, '') + '/send';
+const SEND_URL = 'https://api.smsmobileapi.com/sendsms/';
 
-  const headers = { 'Content-Type': 'application/json' };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+async function sendSms({ to, body }) {
+  const apikey = (process.env.SMSMOBILEAPI_KEY || '').trim();
+  if (!apikey) throw new Error('SMSMOBILEAPI_KEY is not set');
 
-  const payloads = [
-    { to, body, message: body, phone: to, text: body },
-    { number: to, message: body },
-  ];
+  const params = new URLSearchParams({
+    apikey,
+    recipients: String(to || '').trim(),
+    message: String(body || ''),
+  });
 
-  let lastErr;
-  for (const payload of payloads) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      const text = await res.text();
-      if (res.ok) return { ok: true, status: res.status, body: text };
-      lastErr = new Error(`SMS gateway ${res.status}: ${text.slice(0, 500)}`);
-    } catch (e) {
-      lastErr = e;
-    }
+  const url = `${SEND_URL}?${params.toString()}`;
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`SMSMobileAPI non-JSON response (${res.status}): ${text.slice(0, 300)}`);
   }
 
-  if (lastErr) throw lastErr;
-  throw new Error('SMS gateway request failed');
+  const err = data?.result?.error;
+  const ok = res.ok && (err === 0 || err === '0');
+  if (!ok) {
+    throw new Error(
+      `SMSMobileAPI error: HTTP ${res.status}, result=${JSON.stringify(data?.result || data).slice(0, 400)}`
+    );
+  }
+
+  return { ok: true, id: data?.result?.id, sent: data?.result?.sent };
 }
 
 module.exports = { sendSms };

@@ -13,9 +13,6 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS settings_last_email_check_cell TEXT
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS gmail_refresh_token TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS gmail_address TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS gmail_watcher_started_at TIMESTAMPTZ;
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS sms_gateway_url TEXT;
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS sms_gateway_api_key TEXT;
-
 CREATE TABLE IF NOT EXISTS sms_conversation_state (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,

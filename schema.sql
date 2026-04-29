@@ -20,8 +20,6 @@ CREATE TABLE clients (
   gmail_refresh_token TEXT,
   gmail_address TEXT,
   gmail_watcher_started_at TIMESTAMPTZ,
-  sms_gateway_url TEXT,
-  sms_gateway_api_key TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

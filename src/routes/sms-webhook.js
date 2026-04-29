@@ -29,12 +29,17 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
   const { clientId } = req.params;
   const payload = req.body || {};
 
+  // SMSMobileAPI inbound: number, message, time_received, guid
   const rawPhone =
-    payload.from || payload.phone || payload.From || payload.number || payload.sender || payload.msisdn;
+    payload.number || payload.from || payload.phone || payload.From || payload.sender || payload.msisdn;
   const inboundMessage =
-    String(payload.body || payload.message || payload.text || payload.Body || '').trim();
+    String(payload.message || payload.body || payload.text || payload.Body || '').trim();
+  const timeReceived = payload.time_received || null;
+  const inboundGuid = payload.guid || null;
 
-  console.log('[Webhook SMS] inbound', { clientId, rawPhone, len: inboundMessage.length });
+  console.log('[Webhook SMS] inbound', {
+    clientId, rawPhone, len: inboundMessage.length, guid: inboundGuid, time_received: timeReceived,
+  });
 
   try {
     const { rows: [client] } = await db.query('SELECT * FROM clients WHERE id = $1', [clientId]);
@@ -229,12 +234,7 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
 
     setTimeout(async () => {
       try {
-        await sendSms({
-          baseUrl: client.sms_gateway_url,
-          apiKey: client.sms_gateway_api_key,
-          to: phoneDisplay,
-          body: FREE_SITE_MESSAGE,
-        });
+        await sendSms({ to: phoneDisplay, body: FREE_SITE_MESSAGE });
 
         if (sheetRow) {
           await sheets.updateProspectByHeaders(
