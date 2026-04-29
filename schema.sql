@@ -22,7 +22,7 @@ CREATE TABLE clients (
   gmail_watcher_started_at TIMESTAMPTZ,
   sms_free_site_body TEXT,
   sms_free_site_delay_ms INTEGER NOT NULL DEFAULT 20000,
-  sms_min_gap_between_texts_ms INTEGER NOT NULL DEFAULT 0,
+  sms_min_gap_between_texts_ms INTEGER NOT NULL DEFAULT 60000,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

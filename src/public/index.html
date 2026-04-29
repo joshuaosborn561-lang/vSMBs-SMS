@@ -827,8 +827,8 @@
 
       <div class="form-group">
         <label>Minimum gap between outbound texts (milliseconds)</label>
-        <input type="number" id="f_sms_min_gap_between_texts_ms" placeholder="0" min="0" step="500" value="0">
-        <div class="hint">Applied to <strong>every</strong> outbound SMS for this client (sequences, replies, tests) so sends are spaced for carrier compliance. Example: 3000 = at least 3 seconds between any two texts from your number. Campaign sequences also have their own schedule/gaps.</div>
+        <input type="number" id="f_sms_min_gap_between_texts_ms" placeholder="60000" min="0" step="500" value="60000">
+        <div class="hint">Applied to <strong>every</strong> outbound SMS for this client (sequences, replies, tests) so sends are spaced for carrier compliance. Default 60000 ms = 60 seconds. Campaign sequences also have their own schedule/gaps.</div>
       </div>
 
       <div class="form-group">
@@ -1366,7 +1366,7 @@ function openEditFromDetail() {
   document.getElementById('f_google_sheet_id').value = c.google_sheet_id || '';
   document.getElementById('f_sms_free_site_body').value = c.sms_free_site_body || '';
   document.getElementById('f_sms_free_site_delay_ms').value = (c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000);
-  document.getElementById('f_sms_min_gap_between_texts_ms').value = (c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 0);
+  document.getElementById('f_sms_min_gap_between_texts_ms').value = (c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 60000);
 
   openModal('formModal');
 }
@@ -1385,7 +1385,7 @@ async function submitForm() {
     google_sheet_id: document.getElementById('f_google_sheet_id').value.trim() || null,
     sms_free_site_body: document.getElementById('f_sms_free_site_body').value.trim() || null,
     sms_free_site_delay_ms: parseInt(document.getElementById('f_sms_free_site_delay_ms').value, 10) || 20000,
-    sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById('f_sms_min_gap_between_texts_ms').value, 10) || 0),
+    sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById('f_sms_min_gap_between_texts_ms').value, 10) || 60000),
   };
 
   if (!data.name || !data.slack_bot_token || !data.slack_channel_id) {
@@ -1432,7 +1432,7 @@ function clearForm() {
     document.getElementById(id).value = '';
   });
   document.getElementById('f_sms_free_site_delay_ms').value = '20000';
-  document.getElementById('f_sms_min_gap_between_texts_ms').value = '0';
+  document.getElementById('f_sms_min_gap_between_texts_ms').value = '60000';
 }
 
 function formatDelayMs(ms) {

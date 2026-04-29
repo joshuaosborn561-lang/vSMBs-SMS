@@ -65,7 +65,7 @@ router.post('/admin/clients', async (req, res) => {
           : 20000,
         sms_min_gap_between_texts_ms != null && sms_min_gap_between_texts_ms !== ''
           ? Math.max(0, Number(sms_min_gap_between_texts_ms))
-          : 0,
+          : 60000,
       ]
     );
 
