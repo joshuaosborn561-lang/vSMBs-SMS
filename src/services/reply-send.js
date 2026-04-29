@@ -2,10 +2,20 @@ const db = require('../db');
 const smartlead = require('./smartlead');
 const heyreach = require('./heyreach');
 const calendar = require('./calendar');
+const { sendSms } = require('./sms-gateway');
 const { parseProposedTime } = require('../utils/parse-proposed-time');
 
 async function sendReplyToPlatform(client, reply, replyText) {
-  if (reply.platform === 'smartlead') {
+  if (reply.platform === 'sms') {
+    const to = reply.lead_id || reply.lead_email;
+    if (!to) throw new Error('SMS reply missing destination phone (lead_id)');
+    await sendSms({
+      baseUrl: client.sms_gateway_url,
+      apiKey: client.sms_gateway_api_key,
+      to,
+      body: replyText,
+    });
+  } else if (reply.platform === 'smartlead') {
     await smartlead.sendReply(client.smartlead_api_key, reply.campaign_id, reply.lead_id, replyText);
   } else if (reply.platform === 'heyreach') {
     const ctx = typeof reply.thread_context === 'string' ? JSON.parse(reply.thread_context) : reply.thread_context;

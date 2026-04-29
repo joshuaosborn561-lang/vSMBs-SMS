@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const db = require('./db');
 const slack = require('./services/slack');
 const { sendReminder } = require('./services/reminder-email');
+const { pollAllClients } = require('./services/gmail-poll');
 
 function startCron() {
   // ─── Stale reply reminders (every 10 minutes) ─────────────────────
@@ -114,7 +115,16 @@ function startCron() {
     }
   });
 
-  console.log('[Cron] Jobs scheduled: reply reminders + meeting reminders (every 10 min)');
+  // ─── Gmail inbox poll (every 5 minutes) ─────────────────────────────
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      await pollAllClients();
+    } catch (err) {
+      console.error('[Cron] Gmail poll failed', { err: err.message });
+    }
+  });
+
+  console.log('[Cron] Jobs scheduled: reply reminders + meeting reminders (every 10 min), Gmail poll (every 5 min)');
 }
 
 module.exports = { startCron };

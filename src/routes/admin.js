@@ -9,6 +9,8 @@ function webhookUrls(clientId) {
   return {
     smartlead_webhook_url: `${protocol}://${domain}/webhook/smartlead/${clientId}`,
     heyreach_webhook_url: `${protocol}://${domain}/webhook/heyreach/${clientId}`,
+    sms_webhook_url: `${protocol}://${domain}/webhook/sms/${clientId}`,
+    gmail_connect_url: `${protocol}://${domain}/auth/gmail/connect/${clientId}`,
   };
 }
 
@@ -22,6 +24,9 @@ router.post('/admin/clients', async (req, res) => {
     const {
       name, smartlead_api_key, heyreach_api_key, slack_bot_token,
       slack_channel_id, booking_link, calendly_personal_access_token, voice_prompt,
+      google_sheet_id, sheet_tab_prospects, sheet_tab_dnc, sheet_tab_settings,
+      sheet_tab_email_log, settings_last_email_check_cell,
+      sms_gateway_url, sms_gateway_api_key,
     } = req.body;
 
     if (!name || !slack_bot_token || !slack_channel_id) {
@@ -29,8 +34,14 @@ router.post('/admin/clients', async (req, res) => {
     }
 
     const { rows: [client] } = await db.query(
-      `INSERT INTO clients (name, smartlead_api_key, heyreach_api_key, slack_bot_token, slack_channel_id, booking_link, calendly_personal_access_token, voice_prompt)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO clients (
+        name, smartlead_api_key, heyreach_api_key, slack_bot_token, slack_channel_id,
+        booking_link, calendly_personal_access_token, voice_prompt,
+        google_sheet_id, sheet_tab_prospects, sheet_tab_dnc, sheet_tab_settings,
+        sheet_tab_email_log, settings_last_email_check_cell,
+        sms_gateway_url, sms_gateway_api_key
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
       [
         name,
         smartlead_api_key || null,
@@ -40,6 +51,14 @@ router.post('/admin/clients', async (req, res) => {
         booking_link || null,
         calendly_personal_access_token || null,
         voice_prompt || '',
+        google_sheet_id || null,
+        sheet_tab_prospects || null,
+        sheet_tab_dnc || null,
+        sheet_tab_settings || null,
+        sheet_tab_email_log || null,
+        settings_last_email_check_cell || null,
+        sms_gateway_url || null,
+        sms_gateway_api_key || null,
       ]
     );
 
@@ -70,6 +89,9 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
     const allowedFields = [
       'name', 'smartlead_api_key', 'heyreach_api_key', 'slack_bot_token',
       'slack_channel_id', 'booking_link', 'calendly_personal_access_token', 'voice_prompt', 'active',
+      'google_sheet_id', 'sheet_tab_prospects', 'sheet_tab_dnc', 'sheet_tab_settings',
+      'sheet_tab_email_log', 'settings_last_email_check_cell',
+      'sms_gateway_url', 'sms_gateway_api_key', 'gmail_watcher_started_at',
     ];
 
     const updates = [];

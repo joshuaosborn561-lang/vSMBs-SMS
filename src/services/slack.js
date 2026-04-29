@@ -123,6 +123,138 @@ async function updateMessage(token, channelId, messageTs, text) {
   });
 }
 
+async function postSmsEscalation(token, channelId, { replyId, phone, businessName, vertical, city, intent, inboundMessage, reasoning }) {
+  const slack = getClient(token);
+  const meta = JSON.stringify({ replyId, phone });
+  return slack.chat.postMessage({
+    channel: channelId,
+    text: `SMS needs attention: ${phone} — ${intent}`,
+    blocks: [
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: `📱 SMS — ${intent}` },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Phone:* ${phone}\n*Business:* ${businessName || '—'}\n*Vertical:* ${vertical || '—'}\n*City:* ${city || '—'}\n*Reasoning:* ${reasoning || '—'}`,
+        },
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Their message:*\n>${String(inboundMessage).split('\n').join('\n>')}` },
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Reply' },
+            style: 'primary',
+            action_id: 'sms_escalation_reply',
+            value: meta.slice(0, 2000),
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Mark DNC' },
+            style: 'danger',
+            action_id: 'sms_escalation_dnc',
+            value: meta.slice(0, 2000),
+          },
+        ],
+      },
+    ],
+  });
+}
+
+async function postSmsFollowupAlert(token, channelId, payload) {
+  const slack = getClient(token);
+  const meta = JSON.stringify({
+    replyId: payload.replyId,
+    phone: payload.phone,
+    businessName: payload.businessName,
+    vertical: payload.vertical,
+    city: payload.city,
+  });
+  return slack.chat.postMessage({
+    channel: channelId,
+    text: `Free site interest: ${payload.businessName || payload.phone}`,
+    blocks: [
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: '🏗️ Free site — affirmative reply' },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Business:* ${payload.businessName || '—'}\n*Phone:* ${payload.phone}\n*City:* ${payload.city || '—'}\n*Vertical:* ${payload.vertical || '—'}`,
+        },
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Their message:*\n>${String(payload.inboundMessage).split('\n').join('\n>')}` },
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Send Site' },
+            style: 'primary',
+            action_id: 'sms_followup_send_site',
+            value: meta.slice(0, 2000),
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Mark DNC' },
+            style: 'danger',
+            action_id: 'sms_followup_dnc',
+            value: meta.slice(0, 2000),
+          },
+        ],
+      },
+    ],
+  });
+}
+
+async function postGmailInbound(token, channelId, { notificationId, senderName, senderEmail, subject, body }) {
+  const slack = getClient(token);
+  const meta = JSON.stringify({ notificationId });
+  const bodyText = String(body || '').slice(0, 2800);
+  return slack.chat.postMessage({
+    channel: channelId,
+    text: `Email from ${senderEmail}: ${subject}`,
+    blocks: [
+      { type: 'header', text: { type: 'plain_text', text: '📧 Inbound email (websites@)' } },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*From:* ${senderName || '—'} <${senderEmail}>\n*Subject:* ${subject}`,
+        },
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Body:*\n${bodyText}` },
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Mark Done' },
+            style: 'primary',
+            action_id: 'gmail_mark_done',
+            value: meta.slice(0, 2000),
+          },
+        ],
+      },
+    ],
+  });
+}
+
 async function openEditReplyModal(token, triggerId, { replyId, initialDraft, channelId, messageTs }) {
   const slack = getClient(token);
   const meta = JSON.stringify({ replyId, channelId, messageTs });
@@ -155,6 +287,35 @@ async function openEditReplyModal(token, triggerId, { replyId, initialDraft, cha
   });
 }
 
+async function openSmsReplyModal(token, triggerId, { replyId, phone, channelId, messageTs }) {
+  const slack = getClient(token);
+  const meta = JSON.stringify({ replyId, phone, channelId, messageTs });
+
+  return slack.views.open({
+    trigger_id: triggerId,
+    view: {
+      type: 'modal',
+      callback_id: 'sms_reply_modal',
+      private_metadata: meta,
+      title: { type: 'plain_text', text: 'SMS reply' },
+      submit: { type: 'plain_text', text: 'Send SMS' },
+      close: { type: 'plain_text', text: 'Cancel' },
+      blocks: [
+        {
+          type: 'input',
+          block_id: 'sms_body_block',
+          label: { type: 'plain_text', text: 'Message' },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'sms_body_input',
+            multiline: true,
+          },
+        },
+      ],
+    },
+  });
+}
+
 module.exports = {
   postDraftApproval,
   postAlert,
@@ -162,4 +323,8 @@ module.exports = {
   postReminder,
   updateMessage,
   openEditReplyModal,
+  postSmsEscalation,
+  postSmsFollowupAlert,
+  postGmailInbound,
+  openSmsReplyModal,
 };

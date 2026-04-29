@@ -11,6 +11,17 @@ CREATE TABLE clients (
   calendly_personal_access_token TEXT,
   voice_prompt TEXT NOT NULL DEFAULT '',
   active BOOLEAN NOT NULL DEFAULT true,
+  google_sheet_id TEXT,
+  sheet_tab_prospects TEXT DEFAULT 'Prospects',
+  sheet_tab_dnc TEXT DEFAULT 'DNC',
+  sheet_tab_settings TEXT DEFAULT 'Settings',
+  sheet_tab_email_log TEXT DEFAULT 'EmailLog',
+  settings_last_email_check_cell TEXT DEFAULT 'B2',
+  gmail_refresh_token TEXT,
+  gmail_address TEXT,
+  gmail_watcher_started_at TIMESTAMPTZ,
+  sms_gateway_url TEXT,
+  sms_gateway_api_key TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -18,7 +29,7 @@ CREATE TABLE clients (
 CREATE TABLE pending_replies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id UUID NOT NULL REFERENCES clients(id),
-  platform TEXT NOT NULL CHECK (platform IN ('smartlead', 'heyreach')),
+  platform TEXT NOT NULL CHECK (platform IN ('smartlead', 'heyreach', 'sms')),
   campaign_id TEXT,
   lead_id TEXT,
   lead_name TEXT,
@@ -71,3 +82,27 @@ CREATE INDEX idx_pending_replies_client_id ON pending_replies(client_id);
 CREATE INDEX idx_pending_replies_status ON pending_replies(status);
 CREATE INDEX idx_meetings_client_id ON meetings(client_id);
 CREATE INDEX idx_meetings_status ON meetings(status);
+
+CREATE TABLE sms_conversation_state (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  phone_e164 TEXT NOT NULL,
+  stage TEXT NOT NULL DEFAULT 'idle' CHECK (stage IN ('idle', 'awaiting_free_site_ack')),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (client_id, phone_e164)
+);
+
+CREATE INDEX idx_sms_conv_client_phone ON sms_conversation_state(client_id, phone_e164);
+
+CREATE TABLE gmail_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  gmail_message_id TEXT NOT NULL,
+  sheet_log_row INTEGER,
+  slack_metadata JSONB,
+  notified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  handled_at TIMESTAMPTZ,
+  UNIQUE (client_id, gmail_message_id)
+);
+
+CREATE INDEX idx_gmail_notifications_client ON gmail_notifications(client_id);

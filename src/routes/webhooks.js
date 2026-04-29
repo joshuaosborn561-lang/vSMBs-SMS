@@ -258,4 +258,8 @@ router.post('/webhook/heyreach/:clientId', async (req, res) => {
   }
 });
 
+const smsWebhookRouter = require('./sms-webhook');
+
+router.use(smsWebhookRouter);
+
 module.exports = router;
