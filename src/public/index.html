@@ -592,6 +592,56 @@
     .copy-btn:hover { color: var(--accent); }
     .copy-btn.copied { color: var(--green); }
 
+    .sms-cockpit {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-top: 10px;
+    }
+    .sms-cockpit-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 720px) { .sms-cockpit-grid { grid-template-columns: 1fr; } }
+    .sms-cockpit label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px; }
+    .sms-cockpit input, .sms-cockpit textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .sms-cockpit textarea { min-height: 72px; resize: vertical; }
+    .sms-preview-box {
+      background: var(--surface-2);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-top: 8px;
+      border: 1px solid var(--border);
+    }
+    .sms-log-wrap { max-height: 280px; overflow: auto; margin-top: 10px; }
+    .sms-log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sms-log-table th, .sms-log-table td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .sms-log-table th { color: var(--text-muted); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+    .sms-log-dir { font-weight: 600; }
+    .sms-log-dir.in { color: var(--accent-light); }
+    .sms-log-dir.out { color: var(--yellow); }
+    .sms-delay { color: var(--text-muted); font-size: 11px; }
+
     /* ─── Toast ───────────────────────────── */
     .toast {
       position: fixed;
@@ -709,6 +759,24 @@
         <label>Calendly personal access token (optional)</label>
         <input type="text" id="f_calendly_personal_access_token" placeholder="pat_...">
         <div class="hint">Only if <strong>Booking link</strong> is Calendly. With a PAT, we pull <strong>real</strong> open slots from Calendly. For other schedulers, leave blank; connect Google or Outlook below if you want slot suggestions from calendar free/busy — otherwise the draft will use the booking link without invented times.</div>
+      </div>
+
+      <div class="form-group">
+        <label>Google Sheet ID (SMS prospects)</label>
+        <input type="text" id="f_google_sheet_id" placeholder="From sheets.google.com URL — spreadsheet id string">
+        <div class="hint">Required for SMS inbound. Sheet needs tabs: Prospects (phone, business_name, vertical, city, …), DNC, Settings (B2 = last email check), EmailLog.</div>
+      </div>
+
+      <div class="form-group">
+        <label>Positive reply SMS template</label>
+        <textarea id="f_sms_free_site_body" placeholder="I actually made you a site for free — want me to send it to you?&#10;Or use {{business_name}}, {{city}}, {{vertical}}, {{phone}}"></textarea>
+        <div class="hint">Sent after a <strong>positive</strong> classification (after the delay). <code>{{variable}}</code> names match sheet column headers (snake_case).</div>
+      </div>
+
+      <div class="form-group">
+        <label>Delay before that SMS (milliseconds)</label>
+        <input type="number" id="f_sms_free_site_delay_ms" placeholder="20000" min="0" step="1000" value="20000">
+        <div class="hint">Default 20000 = 20 seconds. Dashboard shows time since your last outbound to this number.</div>
       </div>
 
       <div class="form-group">
@@ -1008,6 +1076,35 @@ function openDetail(id) {
         <button class="copy-btn" onclick="copyText('${esc(c.heyreach_webhook_url)}', this)" title="Copy">&#128203;</button>
       </div>
       <div style="font-size:11px; color:var(--text-muted)">Paste into HeyReach campaign webhook settings</div>
+      <div class="webhook-url">
+        <span class="url-text">${esc(c.sms_webhook_url || '')}</span>
+        <button class="copy-btn" onclick="copyText('${esc(c.sms_webhook_url || '')}', this)" title="Copy">&#128203;</button>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px">SMSMobileAPI inbound webhook → this URL</div>
+    </div>
+
+    <div class="detail-section">
+      <h4>SMS cockpit</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Preview messages with sheet variables, see send gaps, and test-send (uses <code>SMSMOBILEAPI_KEY</code> on the server).</p>
+      <div class="sms-cockpit">
+        <div class="sms-cockpit-grid">
+          <div>
+            <label>Preview phone (E.164)</label>
+            <input type="text" id="sms_preview_phone_${c.id}" placeholder="+15551234567" autocomplete="tel">
+          </div>
+          <div>
+            <label>Action secret (WEBHOOK_TEST_SECRET)</label>
+            <input type="password" id="sms_action_secret_${c.id}" placeholder="Paste once — stored in this browser" autocomplete="off" onchange="sessionStorage.setItem('sms_action_secret', this.value)">
+          </div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview from sheet</button>
+        <div id="sms_preview_out_${c.id}" class="sms-preview-box" style="display:none"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')">Send preview as SMS</button>
+        </div>
+        <h4 style="margin-top:16px;font-size:11px;color:var(--text-muted)">Recent SMS log</h4>
+        <div id="sms_log_wrap_${c.id}" class="sms-log-wrap"><div style="opacity:0.5;font-size:12px">Loading…</div></div>
+      </div>
     </div>
 
     <div class="detail-section">
@@ -1071,6 +1168,11 @@ function openDetail(id) {
 
   openModal('detailModal');
   loadCalendarStatus(c.id);
+  const secEl = document.getElementById(`sms_action_secret_${c.id}`);
+  if (secEl && sessionStorage.getItem('sms_action_secret')) {
+    secEl.value = sessionStorage.getItem('sms_action_secret');
+  }
+  loadSmsLog(c.id);
 }
 
 async function toggleActive() {
@@ -1115,6 +1217,9 @@ function openEditFromDetail() {
   document.getElementById('f_booking_link').value = c.booking_link || '';
   document.getElementById('f_calendly_personal_access_token').value = c.calendly_personal_access_token || '';
   document.getElementById('f_voice_prompt').value = c.voice_prompt || '';
+  document.getElementById('f_google_sheet_id').value = c.google_sheet_id || '';
+  document.getElementById('f_sms_free_site_body').value = c.sms_free_site_body || '';
+  document.getElementById('f_sms_free_site_delay_ms').value = (c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000);
 
   openModal('formModal');
 }
@@ -1130,6 +1235,9 @@ async function submitForm() {
     booking_link: document.getElementById('f_booking_link').value.trim() || null,
     calendly_personal_access_token: document.getElementById('f_calendly_personal_access_token').value.trim() || null,
     voice_prompt: document.getElementById('f_voice_prompt').value.trim(),
+    google_sheet_id: document.getElementById('f_google_sheet_id').value.trim() || null,
+    sms_free_site_body: document.getElementById('f_sms_free_site_body').value.trim() || null,
+    sms_free_site_delay_ms: parseInt(document.getElementById('f_sms_free_site_delay_ms').value, 10) || 20000,
   };
 
   if (!data.name || !data.slack_bot_token || !data.slack_channel_id) {
@@ -1171,9 +1279,97 @@ function toggleGuide() {
 
 function clearForm() {
   ['f_name', 'f_smartlead_api_key', 'f_heyreach_api_key', 'f_slack_bot_token',
-   'f_slack_channel_id', 'f_booking_link', 'f_calendly_personal_access_token', 'f_voice_prompt'].forEach(id => {
+   'f_slack_channel_id', 'f_booking_link', 'f_calendly_personal_access_token', 'f_voice_prompt',
+   'f_google_sheet_id', 'f_sms_free_site_body'].forEach(id => {
     document.getElementById(id).value = '';
   });
+  document.getElementById('f_sms_free_site_delay_ms').value = '20000';
+}
+
+function formatDelayMs(ms) {
+  if (ms == null || ms === '') return '—';
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return '—';
+  if (n < 1000) return n + ' ms';
+  return (n / 1000).toFixed(1) + ' s since last outbound to this number';
+}
+
+async function loadSmsLog(clientId) {
+  const wrap = document.getElementById(`sms_log_wrap_${clientId}`);
+  if (!wrap) return;
+  try {
+    const res = await fetch(`${API}/admin/sms/log/${clientId}?limit=80`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    const rows = j.items || [];
+    if (!rows.length) {
+      wrap.innerHTML = '<div style="opacity:0.5;font-size:12px">No SMS logged yet.</div>';
+      return;
+    }
+    wrap.innerHTML = '<table class="sms-log-table"><thead><tr><th>When</th><th>Dir</th><th>Phone</th><th>Gap</th><th>Status</th><th>Message</th></tr></thead><tbody>' +
+      rows.map(r => {
+        const t = new Date(r.created_at).toLocaleString();
+        const dir = r.direction === 'inbound' ? 'in' : 'out';
+        const cls = r.direction === 'inbound' ? 'in' : 'out';
+        const gap = r.direction === 'outbound' ? formatDelayMs(r.delay_ms_since_previous_outbound) : '—';
+        const st = esc(r.status || '');
+        const err = r.error_message ? '<div style="color:var(--red);font-size:11px">' + esc(r.error_message) + '</div>' : '';
+        return `<tr><td>${t}</td><td><span class="sms-log-dir ${cls}">${dir}</span></td><td>${esc(r.lead_phone)}</td><td class="sms-delay">${esc(gap)}</td><td>${st}</td><td>${esc(r.body)}${err}</td></tr>`;
+      }).join('') + '</tbody></table>';
+  } catch (e) {
+    wrap.innerHTML = '<div style="color:var(--red);font-size:12px">' + esc(e.message) + '</div>';
+  }
+}
+
+async function loadSmsPreview(clientId) {
+  const phone = document.getElementById(`sms_preview_phone_${clientId}`)?.value?.trim();
+  const out = document.getElementById(`sms_preview_out_${clientId}`);
+  if (!phone) { toast('Enter a phone number for preview', 'error'); return; }
+  if (!out) return;
+  out.style.display = 'block';
+  out.textContent = 'Loading…';
+  try {
+    const res = await fetch(`${API}/admin/sms/preview/${clientId}?phone=${encodeURIComponent(phone)}`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Preview failed');
+    window._smsPreview = window._smsPreview || {};
+    window._smsPreview[clientId] = j;
+    const vars = JSON.stringify(j.variables || {}, null, 2);
+    out.innerHTML =
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Delay setting: <strong>' + (j.delay_ms != null ? j.delay_ms + ' ms' : '—') + '</strong> · Row match: <strong>' + (j.matched ? 'yes' : 'no') + '</strong></div>' +
+      '<div style="font-size:11px;color:var(--text-muted)">Variables</div><pre style="font-size:11px;margin:4px 0 10px;white-space:pre-wrap">' + esc(vars) + '</pre>' +
+      '<div style="font-size:11px;color:var(--text-muted)">Template</div><div style="opacity:0.9;margin-bottom:8px;white-space:pre-wrap">' + esc(j.template || '') + '</div>' +
+      '<div style="font-size:11px;color:var(--text-muted)">Rendered (what would send)</div><div id="sms_rendered_' + clientId + '" style="font-weight:600;margin-top:4px;white-space:pre-wrap">' + esc(j.rendered || '') + '</div>';
+  } catch (e) {
+    out.textContent = e.message;
+  }
+}
+
+async function sendTestSms(clientId) {
+  const phone = document.getElementById(`sms_preview_phone_${clientId}`)?.value?.trim();
+  const secret = document.getElementById(`sms_action_secret_${clientId}`)?.value?.trim() || sessionStorage.getItem('sms_action_secret');
+  if (!phone) { toast('Enter phone', 'error'); return; }
+  if (!secret) { toast('Enter WEBHOOK_TEST_SECRET (action secret)', 'error'); return; }
+  sessionStorage.setItem('sms_action_secret', secret);
+  let body = (window._smsPreview && window._smsPreview[clientId] && window._smsPreview[clientId].rendered) || '';
+  if (!body) {
+    await loadSmsPreview(clientId);
+    body = (window._smsPreview && window._smsPreview[clientId] && window._smsPreview[clientId].rendered) || '';
+  }
+  if (!body) { toast('Load preview first (or fix sheet / template)', 'error'); return; }
+  try {
+    const res = await fetch(`${API}/admin/sms/test-send/${clientId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      body: JSON.stringify({ phone, body }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Send failed');
+    toast('Test SMS sent', 'success');
+    loadSmsLog(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────

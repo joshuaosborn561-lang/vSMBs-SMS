@@ -2,14 +2,25 @@ const db = require('../db');
 const smartlead = require('./smartlead');
 const heyreach = require('./heyreach');
 const calendar = require('./calendar');
-const { sendSms } = require('./sms-gateway');
+const smsLog = require('./sms-log');
 const { parseProposedTime } = require('../utils/parse-proposed-time');
 
 async function sendReplyToPlatform(client, reply, replyText) {
   if (reply.platform === 'sms') {
     const to = reply.lead_id || reply.lead_email;
     if (!to) throw new Error('SMS reply missing destination phone (lead_id)');
-    await sendSms({ to, body: replyText });
+    let ctx = reply.thread_context || {};
+    if (typeof ctx === 'string') {
+      try { ctx = JSON.parse(ctx || '{}'); } catch { ctx = {}; }
+    }
+    await smsLog.sendSmsLogged({
+      clientId: reply.client_id,
+      leadPhone: to,
+      body: replyText,
+      templateKey: ctx.template_key || 'slack_manual_reply',
+      variables: { source: 'slack_reply', ...ctx },
+      scheduledLogId: null,
+    });
   } else if (reply.platform === 'smartlead') {
     await smartlead.sendReply(client.smartlead_api_key, reply.campaign_id, reply.lead_id, replyText);
   } else if (reply.platform === 'heyreach') {

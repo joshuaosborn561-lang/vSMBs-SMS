@@ -3,11 +3,12 @@ const db = require('../db');
 const sheets = require('../services/sheets');
 const { classifySmsIntent, classifyAffirmative } = require('../services/classifier-sms');
 const slack = require('../services/slack');
-const { sendSms } = require('../services/sms-gateway');
+const smsLog = require('../services/sms-log');
+const { renderSmsTemplate } = require('../utils/sms-template');
 
 const router = Router();
 
-const FREE_SITE_MESSAGE = "I actually made you a site for free — want me to send it to you?";
+const DEFAULT_FREE_SITE_TEMPLATE = "I actually made you a site for free — want me to send it to you?";
 
 function canonicalPhone(rawPhone, fallbackKeys) {
   const s = String(rawPhone || '').trim();
@@ -79,6 +80,17 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
     ];
 
     const phoneDisplay = canonicalPhone(rawPhone, keys);
+
+    try {
+      await smsLog.logInbound({
+        clientId,
+        leadPhone: phoneDisplay,
+        body: inboundMessage,
+        variables: { guid: inboundGuid, time_received: timeReceived },
+      });
+    } catch (e) {
+      console.warn('[Webhook SMS] sms log inbound skipped', e.message);
+    }
 
     // ─── Stage: awaiting ack after free-site prompt ───────────────────
     const { rows: [convState] } = await db.query(
@@ -232,9 +244,45 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
       [clientId, phoneDisplay]
     );
 
+    const delayMs = Math.max(0, Number(client.sms_free_site_delay_ms) || 20000);
+    const template =
+      (client.sms_free_site_body && String(client.sms_free_site_body).trim()) || DEFAULT_FREE_SITE_TEMPLATE;
+    const templateVars = {
+      phone: phoneDisplay,
+      business_name: businessName,
+      vertical,
+      city,
+    };
+    const renderedBody = renderSmsTemplate(template, templateVars);
+
+    let scheduledLogId;
+    try {
+      scheduledLogId = await smsLog.logOutboundScheduled({
+        clientId,
+        leadPhone: phoneDisplay,
+        body: renderedBody,
+        templateKey: 'free_site_followup',
+        variables: { ...templateVars, delay_ms: delayMs, template },
+      });
+    } catch (e) {
+      console.warn('[Webhook SMS] scheduled log insert', e.message);
+    }
+
     setTimeout(async () => {
       try {
-        await sendSms({ to: phoneDisplay, body: FREE_SITE_MESSAGE });
+        const { rows: [c2] } = await db.query('SELECT sms_free_site_body, sms_free_site_delay_ms FROM clients WHERE id = $1', [clientId]);
+        const tpl =
+          (c2?.sms_free_site_body && String(c2.sms_free_site_body).trim()) || DEFAULT_FREE_SITE_TEMPLATE;
+        const bodyToSend = renderSmsTemplate(tpl, templateVars);
+
+        await smsLog.sendSmsLogged({
+          clientId,
+          leadPhone: phoneDisplay,
+          body: bodyToSend,
+          templateKey: 'free_site_followup',
+          variables: { ...templateVars, template: tpl },
+          scheduledLogId,
+        });
 
         if (sheetRow) {
           await sheets.updateProspectByHeaders(
@@ -258,8 +306,8 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
             phoneDisplay,
             businessName || 'Unknown',
             '(automated follow-up)',
-            JSON.stringify({ note: 'auto free-site SMS', phone: phoneDisplay }),
-            FREE_SITE_MESSAGE,
+            JSON.stringify({ note: 'auto free-site SMS', phone: phoneDisplay, template: tpl }),
+            bodyToSend,
           ]
         );
 
@@ -276,9 +324,9 @@ router.post('/webhook/sms/:clientId', async (req, res) => {
           console.error('[Webhook SMS] Failed to post Slack alert for send failure', e.message);
         }
       }
-    }, 20000);
+    }, delayMs);
 
-    res.status(200).json({ ok: true, intent: 'positive', scheduled: true });
+    res.status(200).json({ ok: true, intent: 'positive', scheduled: true, delay_ms: delayMs });
   } catch (err) {
     console.error('[Webhook SMS] error', err.message, err.stack);
     res.status(200).json({ ok: true, error: err.message });

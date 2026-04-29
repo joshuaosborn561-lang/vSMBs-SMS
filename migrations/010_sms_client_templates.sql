@@ -1,0 +1,2 @@
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS sms_free_site_body TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS sms_free_site_delay_ms INTEGER NOT NULL DEFAULT 20000;

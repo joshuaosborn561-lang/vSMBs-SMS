@@ -5,6 +5,7 @@ const slackRoutes = require('./routes/slack');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const testWebhookRoutes = require('./routes/test-webhooks');
+const smsDashboardRoutes = require('./routes/sms-dashboard');
 const { startCron } = require('./cron');
 
 const app = express();
@@ -31,6 +32,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date()
 app.use(webhookRoutes);
 app.use(slackRoutes);
 app.use(adminRoutes);
+app.use(smsDashboardRoutes);
 app.use(authRoutes);
 app.use(testWebhookRoutes);
 
