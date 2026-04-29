@@ -7,19 +7,20 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    /* Same SalesGlider system as reply-handler — daytime / white theme */
     :root {
-      --bg: #0b1a0f;
-      --surface: #122117;
-      --surface-2: #1a2e20;
-      --border: #2a4a32;
-      --text: #e8ede9;
-      --text-muted: #8aaa90;
+      --bg: #ffffff;
+      --surface: #f7faf8;
+      --surface-2: #eef4f0;
+      --border: #d5e3dc;
+      --text: #14291c;
+      --text-muted: #5c7268;
       --accent: #2d6a3f;
       --accent-hover: #245632;
-      --accent-light: #3d8a52;
-      --green: #3d8a52;
-      --red: #cf4444;
-      --yellow: #c9a830;
+      --accent-light: #2f8f4a;
+      --green: #2f8f4a;
+      --red: #c53e3e;
+      --yellow: #b8860b;
       --radius: 8px;
     }
 
@@ -171,7 +172,7 @@
       border: 1px solid var(--border);
     }
 
-    .btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
+    .btn-danger:hover { background: rgba(197, 62, 62, 0.08); }
 
     .btn-sm { padding: 5px 10px; font-size: 12px; }
 
@@ -217,12 +218,12 @@
     }
 
     .status-active {
-      background: rgba(61, 138, 82, 0.15);
-      color: var(--accent-light);
+      background: rgba(47, 143, 74, 0.14);
+      color: #1f6b38;
     }
 
     .status-inactive {
-      background: rgba(207, 68, 68, 0.12);
+      background: rgba(197, 62, 62, 0.1);
       color: var(--red);
     }
 
@@ -242,7 +243,7 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(20, 41, 28, 0.45);
       z-index: 100;
       justify-content: center;
       align-items: flex-start;
@@ -319,7 +320,7 @@
       height: 100vh;
       background: var(--surface);
       border-left: 1px solid var(--border);
-      box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+      box-shadow: -8px 0 32px rgba(20, 41, 28, 0.12);
       transform: translateX(100%);
       transition: transform 0.25s ease;
       z-index: 150;
@@ -379,7 +380,7 @@
     .guide-section summary::-webkit-details-marker { display: none; }
 
     .guide-section summary:hover {
-      background: rgba(61, 138, 82, 0.08);
+      background: rgba(47, 143, 74, 0.08);
     }
 
     .guide-section summary::before {
@@ -437,7 +438,7 @@
     }
 
     .guide-note {
-      background: rgba(61, 138, 82, 0.1);
+      background: rgba(47, 143, 74, 0.09);
       border-left: 3px solid var(--accent-light);
       padding: 10px 14px;
       border-radius: 4px;
