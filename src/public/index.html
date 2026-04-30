@@ -3,94 +3,224 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SalesGlider AI Reply Handler</title>
+  <title>SalesGlider — Campaign console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    /* Same SalesGlider system as reply-handler — daytime / white theme */
+    /* SalesGlider palette — distinct shell from reply-handler */
     :root {
-      --bg: #ffffff;
-      --surface: #f7faf8;
-      --surface-2: #eef4f0;
-      --border: #d5e3dc;
-      --text: #14291c;
-      --text-muted: #5c7268;
+      --bg: #fafcfb;
+      --surface: #ffffff;
+      --surface-2: #f0f5f2;
+      --border: #cfe0d6;
+      --text: #0f1f14;
+      --text-muted: #4d6659;
       --accent: #2d6a3f;
       --accent-hover: #245632;
       --accent-light: #2f8f4a;
       --green: #2f8f4a;
       --red: #c53e3e;
       --yellow: #b8860b;
-      --radius: 8px;
+      --radius: 10px;
+      --radius-lg: 14px;
+      --sidebar-w: 248px;
+      --shadow-sm: 0 1px 2px rgba(15, 31, 20, 0.06);
+      --shadow-md: 0 12px 40px rgba(15, 31, 20, 0.08);
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.55;
       min-height: 100vh;
     }
 
-    /* ─── Layout ──────────────────────────── */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 32px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      position: sticky;
-      top: 0;
-      z-index: 10;
+    /* ─── App shell (sidebar + workspace) ─── */
+    .app-shell {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      min-height: 100vh;
     }
 
-    .header-brand {
+    .app-sidebar {
+      background: linear-gradient(180deg, #f4faf6 0%, #eef6f0 100%);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
       display: flex;
-      align-items: center;
-      gap: 12px;
+      flex-direction: column;
+      gap: 28px;
     }
 
-    .header-logo {
-      width: 32px;
-      height: 32px;
-      background: var(--accent);
-      border-radius: 6px;
+    .sidebar-brand {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .sidebar-logo {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      background: linear-gradient(145deg, var(--accent) 0%, #1e4d2e 100%);
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
       overflow: hidden;
+      box-shadow: var(--shadow-sm);
     }
 
-    .header-logo::before {
+    .sidebar-logo::after {
       content: '';
       position: absolute;
-      top: -6px;
-      right: -6px;
-      width: 20px;
-      height: 20px;
+      top: -8px;
+      right: -8px;
+      width: 22px;
+      height: 22px;
       background: var(--accent-light);
       border-radius: 50%;
-      opacity: 0.4;
+      opacity: 0.35;
     }
 
-    .header-logo svg { position: relative; z-index: 1; }
+    .sidebar-logo svg { position: relative; z-index: 1; }
 
-    .header h1 {
-      font-size: 18px;
+    .sidebar-brand-text h1 {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      line-height: 1.25;
+    }
+
+    .sidebar-brand-text .brand-sales { color: var(--text); }
+    .sidebar-brand-text .brand-glider { color: var(--accent-light); }
+
+    .sidebar-tagline {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-top: 4px;
+      max-width: 180px;
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
       font-weight: 600;
-      letter-spacing: -0.3px;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
     }
 
-    .header h1 .brand-sales { color: var(--text); }
-    .header h1 .brand-glider { color: var(--accent-light); }
-    .header h1 .brand-sub { color: var(--text-muted); font-weight: 400; font-size: 14px; margin-left: 6px; }
+    .sidebar-nav a:hover {
+      background: rgba(45, 106, 63, 0.08);
+      color: var(--text);
+    }
 
-    .container {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 32px 24px;
+    .sidebar-nav a.active {
+      background: rgba(45, 106, 63, 0.14);
+      color: var(--accent);
+      border-left: 3px solid var(--accent-light);
+      margin-left: -3px;
+      padding-left: 12px;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      padding-top: 16px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .app-main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background:
+        radial-gradient(ellipse 120% 80% at 100% -20%, rgba(47, 143, 74, 0.06), transparent 50%),
+        var(--bg);
+    }
+
+    .main-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 28px 36px 20px;
+      flex-wrap: wrap;
+    }
+
+    .main-header-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent-light);
+      margin-bottom: 6px;
+    }
+
+    .main-header h2 {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.6px;
+      color: var(--text);
+    }
+
+    .main-header-sub {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      max-width: 520px;
+    }
+
+    .main-content {
+      flex: 1;
+      padding: 0 36px 48px;
+      max-width: 1200px;
+      width: 100%;
+    }
+
+    @media (max-width: 960px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+      .app-sidebar {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        gap: 12px;
+      }
+      .sidebar-nav,
+      .sidebar-footer {
+        display: none;
+      }
+      .sidebar-tagline {
+        display: none;
+      }
+      .main-header,
+      .main-content {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
     }
 
     /* ─── Stats Bar ───────────────────────── */
@@ -98,14 +228,16 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 16px;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
     }
 
     .stat-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
+      border-radius: var(--radius-lg);
+      padding: 20px 22px;
+      box-shadow: var(--shadow-sm);
+      border-left: 3px solid var(--accent-light);
     }
 
     .stat-card .label {
@@ -130,8 +262,10 @@
     }
 
     .toolbar h2 {
-      font-size: 16px;
-      font-weight: 600;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: var(--text);
     }
 
     /* ─── Buttons ─────────────────────────── */
@@ -185,13 +319,18 @@
     .client-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
+      border-radius: var(--radius-lg);
+      padding: 22px 24px;
       cursor: pointer;
-      transition: border-color 0.15s;
+      transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+      box-shadow: var(--shadow-sm);
     }
 
-    .client-card:hover { border-color: var(--accent); }
+    .client-card:hover {
+      border-color: rgba(45, 106, 63, 0.45);
+      box-shadow: 0 8px 28px rgba(15, 31, 20, 0.07);
+      transform: translateY(-1px);
+    }
 
     .client-card-header {
       display: flex;
@@ -238,34 +377,67 @@
     .client-meta .key-present { color: var(--green); }
     .client-meta .key-missing { color: var(--text-muted); opacity: 0.5; }
 
-    /* ─── Modal ───────────────────────────── */
-    .modal-overlay {
+    /* ─── Modals & detail panel ───────────── */
+    .modal-overlay,
+    .panel-overlay {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(20, 41, 28, 0.45);
       z-index: 100;
+      overflow-y: auto;
+    }
+
+    .modal-overlay {
+      background: rgba(15, 31, 20, 0.35);
+      backdrop-filter: blur(4px);
       justify-content: center;
       align-items: flex-start;
-      padding-top: 60px;
-      overflow-y: auto;
+      padding: 48px 16px 80px;
     }
 
     .modal-overlay.active { display: flex; }
 
+    .panel-overlay {
+      background: rgba(15, 31, 20, 0.22);
+      backdrop-filter: blur(3px);
+      justify-content: flex-end;
+      align-items: stretch;
+      padding: 0;
+    }
+
+    .panel-overlay.active { display: flex; }
+
     .modal {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       width: 100%;
       max-width: 640px;
-      margin-bottom: 60px;
-      animation: slideUp 0.2s ease;
+      margin-bottom: 0;
+      box-shadow: var(--shadow-md);
+      animation: modalIn 0.22s ease;
     }
 
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+    .panel {
+      width: min(560px, 100vw);
+      max-width: 100%;
+      min-height: 100%;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      box-shadow: -16px 0 48px rgba(15, 31, 20, 0.1);
+      display: flex;
+      flex-direction: column;
+      animation: panelIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes panelIn {
+      from { opacity: 0; transform: translateX(24px); }
+      to { opacity: 1; transform: translateX(0); }
     }
 
     .modal-header {
@@ -461,15 +633,30 @@
 
     .guide-category:first-child { margin-top: 0; }
 
-    /* When drawer is open on wide screens, shift modal left to make room */
-    @media (min-width: 1200px) {
+    /* Guide drawer + detail panel: avoid overlap on very wide screens */
+    @media (min-width: 1400px) {
       body.guide-open .modal-overlay.active {
         padding-right: 440px;
         transition: padding 0.25s ease;
       }
+      body.guide-open .panel-overlay.active .panel {
+        margin-right: 440px;
+        transition: margin 0.25s ease;
+      }
     }
 
-    .modal-body { padding: 24px; }
+    .modal-body {
+      padding: 24px;
+      max-height: min(70vh, 720px);
+      overflow-y: auto;
+    }
+
+    .panel .modal-body {
+      flex: 1;
+      max-height: none;
+      overflow-y: auto;
+      padding-bottom: 32px;
+    }
 
     .modal-footer {
       display: flex;
@@ -477,6 +664,12 @@
       gap: 8px;
       padding: 16px 24px;
       border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface);
+    }
+
+    .panel .modal-footer {
+      box-shadow: 0 -8px 24px rgba(15, 31, 20, 0.04);
     }
 
     /* ─── Forms ───────────────────────────── */
@@ -733,27 +926,49 @@
 </head>
 <body>
 
-<div class="header">
-  <div class="header-brand">
-    <div class="header-logo">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/>
-      </svg>
+<div class="app-shell">
+  <aside class="app-sidebar" aria-label="Primary">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+        </svg>
+      </div>
+      <div class="sidebar-brand-text">
+        <h1><span class="brand-sales">Sales</span><span class="brand-glider">Glider</span></h1>
+        <p class="sidebar-tagline">SMS, Slack, and inbox routing in one place.</p>
+      </div>
     </div>
-    <h1><span class="brand-sales">Sales</span><span class="brand-glider">Glider</span><span class="brand-sub">AI Reply Handler</span></h1>
+    <nav class="sidebar-nav" aria-label="Sections">
+      <a href="#clients" class="active" onclick="return false">Clients</a>
+      <a href="#guide" onclick="toggleGuide(); return false;">Setup guide</a>
+    </nav>
+    <p class="sidebar-footer">Prospects &amp; campaign events are stored in Supabase when configured on the server.</p>
+  </aside>
+
+  <div class="app-main">
+    <header class="main-header">
+      <div>
+        <div class="main-header-eyebrow">Operations</div>
+        <h2 id="clients">Client workspace</h2>
+        <p class="main-header-sub">Wire SmartLead, HeyReach, Slack, and SMS — open a card for webhooks, calendars, and the SMS campaign console.</p>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh list</button>
+        <button class="btn btn-primary" onclick="openCreateModal()">Add client</button>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <div class="stats" id="stats"></div>
+
+      <div class="toolbar">
+        <h2>Your clients</h2>
+      </div>
+
+      <div class="client-grid" id="clientGrid"></div>
+    </div>
   </div>
-  <button class="btn btn-primary" onclick="openCreateModal()">+ Add Client</button>
-</div>
-
-<div class="container">
-  <div class="stats" id="stats"></div>
-
-  <div class="toolbar">
-    <h2>Clients</h2>
-    <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh</button>
-  </div>
-
-  <div class="client-grid" id="clientGrid"></div>
 </div>
 
 <!-- Create / Edit Modal -->
@@ -1006,9 +1221,9 @@
   </div>
 </div>
 
-<!-- Detail Modal -->
-<div class="modal-overlay" id="detailModal">
-  <div class="modal">
+<!-- Client detail (slide-over panel) -->
+<div class="panel-overlay" id="detailModal">
+  <div class="panel">
     <div class="modal-header">
       <h3 id="detailTitle">Client Details</h3>
       <div class="modal-header-actions">
@@ -2096,17 +2311,17 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 3000);
 }
 
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
+// Close modals / panels on overlay click
+document.querySelectorAll('.modal-overlay, .panel-overlay').forEach(overlay => {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.classList.remove('active');
   });
 });
 
-// Close modals on Escape
+// Close modals / panels on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+    document.querySelectorAll('.modal-overlay.active, .panel-overlay.active').forEach(m => m.classList.remove('active'));
   }
 });
 
