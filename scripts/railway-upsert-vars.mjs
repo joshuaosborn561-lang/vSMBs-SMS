@@ -10,6 +10,7 @@ const token = process.env.RAILWAY_TOKEN;
 const projectId = process.env.RAILWAY_PROJECT_ID;
 const environmentId = process.env.RAILWAY_ENVIRONMENT_ID;
 const serviceId = process.env.RAILWAY_SERVICE_ID;
+const skipDeploys = process.env.SKIP_DEPLOY === 'true' || process.env.SKIP_DEPLOY === '1';
 
 if (!token || !projectId || !environmentId || !serviceId) {
   console.error('Missing RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID, or RAILWAY_SERVICE_ID');
@@ -41,7 +42,7 @@ async function upsert(name, value) {
           serviceId,
           name,
           value: String(value),
-          skipDeploys: false,
+          skipDeploys,
         },
       },
     }),

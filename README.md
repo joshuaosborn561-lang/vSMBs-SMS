@@ -17,6 +17,16 @@ HeyReach Webhook ──┘                            │
 
 ### Railway Postgres + Supabase (SMS campaigns)
 
+**Secrets on Railway app service** (GraphQL API works with `RAILWAY_TOKEN`; the Railway CLI may reject some tokens — use scripts):
+
+```bash
+npm run railway:vars    # list keys + redacted previews (verify presence)
+# Bulk-set from a local file (never commit the file):
+SKIP_DEPLOY=true node scripts/railway-upsert-env-file.mjs ./my-secrets.env
+```
+
+Core vars already expected in production: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `SMSMOBILEAPI_KEY`, `SLACK_SIGNING_SECRET`, `WEBHOOK_TEST_SECRET`, `LEADMAGIC_API_KEY`. Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `MICROSOFT_*`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `DASHBOARD_ACTION_SECRET`.
+
 - **Railway:** App service needs `DATABASE_URL` from the Postgres plugin. Apply incremental migrations with tracking:
   ```bash
   export RAILWAY_TOKEN=... RAILWAY_PROJECT_ID=... RAILWAY_ENVIRONMENT_ID=... POSTGRES_SERVICE_ID=...  # Postgres plugin service id
