@@ -39,9 +39,10 @@ app.use(authRoutes);
 app.use(testWebhookRoutes);
 
 // ─── Start ───────────────────────────────────────────────────────────
-// Bind 0.0.0.0 so Railway / Docker can route to the container (avoids connection refused on health checks)
-const host = '0.0.0.0';
-app.listen(PORT, host, () => {
-  console.log(`[Server] ReplyHandler running on http://${host}:${PORT}`);
+// Bind all interfaces (IPv6 :: accepts IPv4-mapped traffic on Railway’s mesh)
+const port = Number(PORT) || 3000;
+const host = process.env.LISTEN_HOST || '::';
+app.listen(port, host, () => {
+  console.log(`[Server] ReplyHandler listening on ${host}:${port}`);
   startCron();
 });
