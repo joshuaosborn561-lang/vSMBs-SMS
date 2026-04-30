@@ -1033,42 +1033,41 @@
       gap: 12px;
     }
 
-    /* Campaign panel: onboarding + master inbox */
-    .panel-shell {
-      display: flex;
-      gap: 0;
-      align-items: stretch;
-      min-height: min(70vh, 640px);
+    /* Campaign panel (single column — master inbox is a main-area tab) */
+    .panel-campaign-body {
       margin: 0 -24px;
-      padding: 0;
-    }
-    .panel-onboarding {
-      flex: 1;
-      min-width: 0;
-      overflow-y: auto;
       padding: 0 24px 16px;
+      min-height: min(70vh, 640px);
+      overflow-y: auto;
     }
-    .panel-inbox {
-      width: 300px;
-      flex-shrink: 0;
-      border-left: 1px solid var(--border);
-      background: var(--surface-2);
+    .main-workspace-view { display: block; }
+    .main-workspace-view.hidden { display: none; }
+    .master-inbox-page {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      min-height: 420px;
       display: flex;
       flex-direction: column;
-      max-height: min(75vh, 720px);
+      overflow: hidden;
     }
-    .panel-inbox-header {
-      padding: 14px 16px;
+    .master-inbox-page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 20px;
       border-bottom: 1px solid var(--border);
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 700;
-      color: var(--text);
     }
-    .panel-inbox-body {
+    .master-inbox-page-body {
       flex: 1;
       overflow-y: auto;
-      padding: 10px 12px 16px;
-      font-size: 12px;
+      padding: 16px 20px 24px;
+      font-size: 13px;
+      max-height: min(70vh, 720px);
     }
     .inbox-row {
       padding: 10px 10px;
@@ -1129,33 +1128,59 @@
       </div>
     </div>
     <nav class="sidebar-nav" aria-label="Sections">
-      <a href="#campaigns" class="active" onclick="return false">Campaigns</a>
+      <a href="#campaigns" id="navCampaigns" class="active" onclick="setAppView('campaigns'); return false;">Campaigns</a>
+      <a href="#inbox" id="navInbox" onclick="setAppView('inbox'); return false;">Master inbox</a>
       <a href="#guide" id="guideToggleBtn" onclick="toggleGuide(); return false;">How it works</a>
     </nav>
     <p class="sidebar-footer">Prospects &amp; campaign events are stored in Supabase when configured on the server.</p>
   </aside>
 
   <div class="app-main">
-    <header class="main-header">
-      <div>
-        <div class="main-header-eyebrow">SMS outreach</div>
-        <h2 id="campaigns">Campaigns</h2>
-        <p class="main-header-sub">Like outbound tools you already use: start with a name (draft), connect Slack, build your SMS sequence, add leads, then go live. Open a campaign to follow the same tabs inside.</p>
-      </div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh</button>
-        <button class="btn btn-primary" onclick="openCreateCampaign()">New campaign</button>
-      </div>
-    </header>
+    <div id="mainViewCampaigns" class="main-workspace-view">
+      <header class="main-header">
+        <div>
+          <div class="main-header-eyebrow">SMS outreach</div>
+          <h2 id="campaigns">Campaigns</h2>
+          <p class="main-header-sub">Like outbound tools you already use: start with a name (draft), connect Slack, build your SMS sequence, add leads, then go live. Open a campaign to follow the same tabs inside.</p>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh</button>
+          <button class="btn btn-primary" onclick="openCreateCampaign()">New campaign</button>
+        </div>
+      </header>
 
-    <div class="main-content">
-      <div class="stats" id="stats"></div>
+      <div class="main-content">
+        <div class="stats" id="stats"></div>
 
-      <div class="toolbar">
-        <h2>All campaigns</h2>
+        <div class="toolbar">
+          <h2>All campaigns</h2>
+        </div>
+
+        <div class="campaign-grid" id="campaignGrid"></div>
       </div>
+    </div>
 
-      <div class="campaign-grid" id="campaignGrid"></div>
+    <div id="mainViewInbox" class="main-workspace-view hidden">
+      <header class="main-header">
+        <div>
+          <div class="main-header-eyebrow">SMS outreach</div>
+          <h2>Master inbox</h2>
+          <p class="main-header-sub">Recent inbound and outbound SMS across all campaigns. Open a row to jump to that campaign.</p>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="loadMasterInbox()">Refresh</button>
+        </div>
+      </header>
+      <div class="main-content">
+        <div class="master-inbox-page">
+          <div class="master-inbox-page-header">
+            <span>All messages</span>
+          </div>
+          <div class="master-inbox-page-body" id="master_inbox_body">
+            <div style="opacity:0.5;font-size:13px">Loading…</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1178,7 +1203,7 @@
         <ol>
           <li><strong>New campaign</strong> &mdash; creates a draft; rename it on step 3 (Settings). Use <strong>Save draft</strong> if Slack is not ready yet.</li>
           <li><strong>Steps 1–4</strong> in the panel: upload leads &amp; map, sequence, settings (Slack + SMS copy), preview &amp; send.</li>
-          <li><strong>Master inbox</strong> on the right shows recent SMS across all campaigns; click a row to open that campaign.</li>
+          <li><strong>Master inbox</strong> in the sidebar shows recent SMS across all campaigns; click a row to open that campaign.</li>
         </ol>
         <div class="guide-note">Server needs <code>SUPABASE_URL</code> + service role, SMS provider keys, <code>SLACK_SIGNING_SECRET</code> for interactive Slack payloads.</div>
       </div>
@@ -1252,6 +1277,32 @@
 const API = window.location.origin;
 let clients = [];
 let currentDetailClient = null;
+
+function setAppView(view) {
+  const camp = document.getElementById('mainViewCampaigns');
+  const inbox = document.getElementById('mainViewInbox');
+  const navC = document.getElementById('navCampaigns');
+  const navI = document.getElementById('navInbox');
+  if (!camp || !inbox) return;
+  if (view === 'inbox') {
+    camp.classList.add('hidden');
+    inbox.classList.remove('hidden');
+    if (navC) { navC.classList.remove('active'); }
+    if (navI) { navI.classList.add('active'); }
+    loadMasterInbox();
+  } else {
+    inbox.classList.add('hidden');
+    camp.classList.remove('hidden');
+    if (navI) { navI.classList.remove('active'); }
+    if (navC) { navC.classList.add('active'); }
+  }
+}
+
+function openCampaignFromInbox(clientId) {
+  if (!clientId) return;
+  setAppView('campaigns');
+  void openDetail(clientId);
+}
 
 function isCampaignDraft(c) {
   return String(c.status || '').toLowerCase() === 'draft';
@@ -1378,8 +1429,7 @@ async function openDetail(id) {
   document.getElementById('toggleActiveBtn').textContent = c.status === 'live' ? 'Pause campaign' : 'Resume campaign';
 
   document.getElementById('detailBody').innerHTML = `
-    <div class="panel-shell">
-      <div class="panel-onboarding">
+    <div class="panel-campaign-body">
         <div class="onboarding-rail">
           <div class="onboarding-steps" role="tablist" aria-label="Campaign setup steps">
             <button type="button" role="tab" class="ob-step active" data-ob="upload" data-client="${c.id}" onclick="onboardingStep('${c.id}', 'upload')">1 · Upload &amp; map</button>
@@ -1540,15 +1590,6 @@ async function openDetail(id) {
     </div>
         </div>
 
-      </div>
-
-      <aside class="panel-inbox" aria-label="Master inbox">
-        <div class="panel-inbox-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <span>Master inbox</span>
-          <button type="button" class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:11px" onclick="loadMasterInbox()">Refresh</button>
-        </div>
-        <div class="panel-inbox-body" id="master_inbox_body"><div style="opacity:0.5;font-size:12px">Loading…</div></div>
-      </aside>
     </div>
   `;
 
@@ -1566,7 +1607,6 @@ async function openDetail(id) {
   if (!['upload', 'sequence', 'settings', 'send'].includes(savedStep)) savedStep = 'upload';
   onboardingStep(c.id, savedStep);
   loadSmsLog(c.id);
-  loadMasterInbox();
   smsCpRenderDow(c.id, c.sequence?.schedule_days || [1,2,3,4,5]);
   await loadVariableSuggestions(c.id);
   smsCpRenderSteps(c.id, (c.sequence && c.sequence.steps && c.sequence.steps.length) ? c.sequence.steps : [{ body_template: '(Draft — write your first SMS for {{business_name}})', delay_after_ms: 86400000 }]);
@@ -1593,6 +1633,7 @@ async function toggleActive() {
 }
 
 async function openCreateCampaign() {
+  setAppView('campaigns');
   try {
     const res = await fetch(`${API}/admin/campaigns`, {
       method: 'POST',
@@ -1704,7 +1745,7 @@ async function loadMasterInbox() {
       const phone = esc(r.lead_phone || '');
       const preview = esc(String(r.body || '').slice(0, 120));
       const cid = esc(r.client_id || '');
-      return `<div class="inbox-row" role="button" tabindex="0" onclick="openDetail('${cid}')" onkeydown="if(event.key==='Enter')openDetail('${cid}')">
+      return `<div class="inbox-row" role="button" tabindex="0" onclick="openCampaignFromInbox('${cid}')" onkeydown="if(event.key==='Enter')openCampaignFromInbox('${cid}')">
         <div><span class="dir ${dcls}">${dir}</span> · <strong>${camp}</strong></div>
         <div style="margin-top:4px;font-weight:600">${phone}</div>
         <div style="margin-top:4px;opacity:0.92;line-height:1.35">${preview}${String(r.body || '').length > 120 ? '…' : ''}</div>
@@ -2536,6 +2577,7 @@ document.addEventListener('keydown', (e) => {
 
 // ─── Init ────────────────────────────────────────────
 loadClients();
+loadMasterInbox();
 </script>
 
 </body>
