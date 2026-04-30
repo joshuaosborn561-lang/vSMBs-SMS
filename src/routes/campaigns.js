@@ -108,7 +108,7 @@ async function loadFullCampaign(clientId) {
     sms_free_site_body: client.sms_free_site_body,
     sms_free_site_delay_ms: client.sms_free_site_delay_ms,
     sms_min_gap_between_texts_ms: client.sms_min_gap_between_texts_ms,
-    sms_gateway_port: Number(client.sms_gateway_port) === 2 ? 2 : 1,
+    sms_gateway_port: Number(client.sms_gateway_port) === 1 ? 1 : 2,
     sms_gateway_device_sid: client.sms_gateway_device_sid || null,
     sms_webhook_url: webhookUrl(client.id),
     counts: {
@@ -164,7 +164,7 @@ function applyClientPatch(input) {
     if (key === 'sms_free_site_body' && (v === '' || v == null)) v = null;
     if (key === 'sms_gateway_port') {
       const p = Number(v);
-      v = p === 2 ? 2 : 1;
+      v = p === 1 ? 1 : 2;
     }
     if (key === 'sms_gateway_device_sid') {
       const s = String(v || '').trim();

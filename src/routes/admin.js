@@ -119,7 +119,7 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
       }
       if (key === 'sms_gateway_port') {
         const p = Number(v);
-        v = p === 2 ? 2 : 1;
+        v = p === 1 ? 1 : 2;
       }
       if (key === 'sms_gateway_device_sid') {
         v = String(v || '').trim() || null;
