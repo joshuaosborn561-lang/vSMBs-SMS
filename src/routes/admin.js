@@ -31,8 +31,8 @@ router.post('/admin/clients', async (req, res) => {
       sms_min_gap_between_texts_ms,
     } = req.body;
 
-    if (!name || !slack_bot_token || !slack_channel_id) {
-      return res.status(400).json({ error: 'name, slack_bot_token, and slack_channel_id are required' });
+    if (!name || String(name).trim() === '') {
+      return res.status(400).json({ error: 'name is required' });
     }
 
     const { rows: [client] } = await db.query(
@@ -48,8 +48,8 @@ router.post('/admin/clients', async (req, res) => {
         name,
         smartlead_api_key || null,
         heyreach_api_key || null,
-        slack_bot_token,
-        slack_channel_id,
+        slack_bot_token && String(slack_bot_token).trim() ? String(slack_bot_token).trim() : null,
+        slack_channel_id && String(slack_channel_id).trim() ? String(slack_channel_id).trim() : null,
         booking_link || null,
         calendly_personal_access_token || null,
         voice_prompt || '',
@@ -110,6 +110,9 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
     for (const [key, value] of Object.entries(fields)) {
       if (!allowedFields.includes(key)) continue;
       let v = value;
+      if ((key === 'slack_bot_token' || key === 'slack_channel_id') && (v === '' || v === undefined)) {
+        v = null;
+      }
       if (key === 'sms_min_gap_between_texts_ms') {
         v = Math.max(0, Number(v) || 0);
       }
@@ -140,6 +143,31 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Update client error', { err: err.message });
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete campaign workspace (FK on pending_replies/meetings may lack CASCADE)
+router.delete('/admin/clients/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM meetings WHERE client_id = $1', [clientId]);
+    await client.query('DELETE FROM pending_replies WHERE client_id = $1', [clientId]);
+    const { rowCount } = await client.query('DELETE FROM clients WHERE id = $1', [clientId]);
+    await client.query('COMMIT');
+    if (!rowCount) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    smsLog.invalidateClientMinGapCache(clientId);
+    console.log('[Admin] Client deleted', { id: clientId });
+    res.status(204).send();
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[Admin] Delete client error', { err: err.message });
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

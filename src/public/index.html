@@ -977,6 +977,102 @@
     .campaign-tab-panel.active {
       display: block;
     }
+
+    /* Campaign builder wizard */
+    .wizard-rail {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .wizard-steps {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .wizard-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--surface-2);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .wizard-step:hover { border-color: var(--border); color: var(--text); }
+    .wizard-step.active {
+      background: rgba(45, 106, 63, 0.12);
+      color: var(--accent);
+      border-color: rgba(45, 106, 63, 0.35);
+    }
+    .wizard-step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .wizard-step.active .wizard-step-num {
+      background: var(--accent);
+      color: #fff;
+    }
+    .wizard-panel { display: none; animation: fadeIn 0.2s ease; }
+    .wizard-panel.active { display: block; }
+    .wizard-nav {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .badge-draft {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: rgba(184, 134, 11, 0.15);
+      color: #8a6a0a;
+      margin-left: 8px;
+    }
+    .campaign-card-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .campaign-card-actions .btn-icon {
+      padding: 6px 10px;
+      font-size: 12px;
+      min-width: auto;
+    }
+    .campaign-card-main {
+      flex: 1;
+      min-width: 0;
+      cursor: pointer;
+    }
+    .campaign-card-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
   </style>
 </head>
 <body>
@@ -1006,7 +1102,7 @@
       <div>
         <div class="main-header-eyebrow">SMS outreach</div>
         <h2 id="campaigns">Campaigns</h2>
-        <p class="main-header-sub">Each campaign is a workspace: build sequences, upload leads, preview messages, and wire Slack. Open one to work step-by-step in tabs — like a lightweight sequence builder.</p>
+        <p class="main-header-sub">Like outbound tools you already use: start with a name (draft), connect Slack, build your SMS sequence, add leads, then go live. Open a campaign to follow the same tabs inside.</p>
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
         <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh</button>
@@ -1026,7 +1122,7 @@
   </div>
 </div>
 
-<!-- Create / Edit Modal -->
+<!-- Create / Edit Modal (wizard: similar flow to SmartLead — create → connect → content → review) -->
 <div class="modal-overlay" id="formModal">
   <div class="modal">
     <div class="modal-header">
@@ -1038,45 +1134,71 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="editClientId">
+      <input type="hidden" id="formWizardStep" value="0">
 
-      <div class="form-group">
-        <label>Campaign name *</label>
-        <input type="text" id="f_name" placeholder="e.g. Cold outreach — Dallas plumbers">
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>Slack Bot Token *</label>
-          <input type="text" id="f_slack_bot_token" placeholder="xoxb-...">
-        </div>
-        <div class="form-group">
-          <label>Slack Channel ID *</label>
-          <input type="text" id="f_slack_channel_id" placeholder="C0123456789">
+      <div class="wizard-rail" id="formWizardRail">
+        <div class="wizard-steps" role="tablist" aria-label="Campaign setup steps">
+          <button type="button" class="wizard-step active" data-wizard="0" onclick="setFormWizardStep(0)"><span class="wizard-step-num">1</span> Name</button>
+          <button type="button" class="wizard-step" data-wizard="1" onclick="setFormWizardStep(1)"><span class="wizard-step-num">2</span> Slack</button>
+          <button type="button" class="wizard-step" data-wizard="2" onclick="setFormWizardStep(2)"><span class="wizard-step-num">3</span> Auto-reply</button>
+          <button type="button" class="wizard-step" data-wizard="3" onclick="setFormWizardStep(3)"><span class="wizard-step-num">4</span> Timing</button>
         </div>
       </div>
 
-      <div class="form-group">
-        <label>Positive reply SMS template</label>
-        <textarea id="f_sms_free_site_body" placeholder="I actually made you a site for free — want me to send it to you?&#10;Or use {{business_name}}, {{city}}, {{vertical}}, {{phone}}"></textarea>
-        <div class="hint">Sent after a <strong>positive</strong> classification (after the delay). <code>{{variable}}</code> names match prospect columns and <code>extra</code> fields in Supabase (snake_case).</div>
+      <div id="wizard_panel_0" class="wizard-panel active">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 1 — Create the campaign shell (can stay <strong>draft</strong> until Slack is filled in). You will add sequence steps and leads after saving.</p>
+        <div class="form-group">
+          <label>Campaign name *</label>
+          <input type="text" id="f_name" placeholder="e.g. Q1 plumbers — no website">
+        </div>
       </div>
 
-      <div class="form-group">
-        <label>Delay before that SMS (milliseconds)</label>
-        <input type="number" id="f_sms_free_site_delay_ms" placeholder="20000" min="0" step="1000" value="20000">
-        <div class="hint">Default 20000 = 20 seconds. Dashboard shows time since your last outbound to this number.</div>
+      <div id="wizard_panel_1" class="wizard-panel">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 2 — Connect Slack for alerts and actions (optional until you are ready to go live).</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Slack bot token</label>
+            <input type="text" id="f_slack_bot_token" placeholder="xoxb-...">
+          </div>
+          <div class="form-group">
+            <label>Slack channel ID</label>
+            <input type="text" id="f_slack_channel_id" placeholder="C0123456789">
+          </div>
+        </div>
+        <div class="guide-note" style="margin-top:4px">Leave blank to save as draft. Required before routing real Slack notifications.</div>
       </div>
 
-      <div class="form-group">
-        <label>Minimum gap between outbound texts (milliseconds)</label>
-        <input type="number" id="f_sms_min_gap_between_texts_ms" placeholder="60000" min="0" step="500" value="60000">
-        <div class="hint">Applied to <strong>every</strong> outbound SMS from this workspace (sequences, replies, tests). Default 60000 ms = 60 seconds. Each SMS sequence can also set its own gaps.</div>
+      <div id="wizard_panel_2" class="wizard-panel">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 3 — Message sent after the classifier marks an inbound reply as <strong>positive</strong> (inbound automation).</p>
+        <div class="form-group">
+          <label>Positive-reply SMS template</label>
+          <textarea id="f_sms_free_site_body" placeholder="Hi {{business_name}} — ..."></textarea>
+          <div class="hint"><code>{{variable}}</code> matches Supabase prospect columns / <code>extra</code> (snake_case).</div>
+        </div>
       </div>
 
+      <div id="wizard_panel_3" class="wizard-panel">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 4 — Global pacing for this campaign workspace (sequences can add their own gaps).</p>
+        <div class="form-group">
+          <label>Delay before positive-reply SMS (ms)</label>
+          <input type="number" id="f_sms_free_site_delay_ms" placeholder="20000" min="0" step="1000" value="20000">
+        </div>
+        <div class="form-group">
+          <label>Minimum gap between any outbound SMS (ms)</label>
+          <input type="number" id="f_sms_min_gap_between_texts_ms" placeholder="60000" min="0" step="500" value="60000">
+          <div class="hint">Default 60000 ms = 60 seconds for carrier safety.</div>
+        </div>
+      </div>
+
+      <div class="wizard-nav">
+        <button type="button" class="btn btn-ghost" id="wizardBackBtn" onclick="wizardStepDelta(-1)">Back</button>
+        <button type="button" class="btn btn-ghost" id="wizardNextBtn" onclick="wizardStepDelta(1)">Next</button>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('formModal')">Cancel</button>
-      <button class="btn btn-primary" id="formSubmitBtn" onclick="submitForm()">Create campaign</button>
+      <button class="btn btn-ghost" id="saveDraftBtn" onclick="submitForm(true)">Save draft</button>
+      <button class="btn btn-primary" id="formSubmitBtn" onclick="submitForm(false)">Save campaign</button>
     </div>
   </div>
 </div>
@@ -1089,20 +1211,22 @@
   </div>
   <div class="guide-body">
 
-    <p style="font-size:13px;color:var(--text-muted);line-height:1.65;margin-bottom:16px">This console is for <strong>SMS outreach</strong>: sequences, lead lists, preview, pacing, and Supabase-backed prospects. Use the tabs inside a campaign so you are not staring at one endless page.</p>
+    <p style="font-size:13px;color:var(--text-muted);line-height:1.65;margin-bottom:16px">This console follows the same <strong>mental model as outbound sequencers</strong>: create a campaign (often starts as a <strong>draft</strong>), connect your workspace (Slack), build the sequence, import leads, then monitor and launch — except here the sends are SMS.</p>
 
     <div class="guide-category">Quick start</div>
 
     <details class="guide-section" open>
-      <summary>Create and send an SMS sequence</summary>
+      <summary>Campaign flow (draft → live)</summary>
       <div class="guide-section-body">
         <ol>
-          <li><strong>New campaign</strong> &mdash; pick a name and paste Slack bot token + channel (human review lives there).</li>
-          <li>Open the campaign card &rarr; <strong>Sequence</strong> tab &rarr; create or pick an SMS campaign, set send window and gaps (carrier-safe defaults help).</li>
-          <li><strong>Leads</strong> tab &rarr; upload CSV or paste phones, preview merged messages, then enroll.</li>
-          <li><strong>Overview</strong> tab &rarr; test-send or watch the SMS log; inbound replies get sentiment and STOP auto-DNC.</li>
+          <li><strong>New campaign</strong> &mdash; wizard step 1: name only. Use <strong>Save draft</strong> if Slack is not ready yet.</li>
+          <li><strong>Slack</strong> &mdash; step 2: bot token + channel ID (needed for notifications / approve flows).</li>
+          <li>Open the campaign &rarr; <strong>Sequence</strong> tab &mdash; define SMS steps and schedule (like adding emails + schedule elsewhere).</li>
+          <li><strong>Leads &amp; data</strong> &mdash; CSV / paste phones, preview merge tags, enroll.</li>
+          <li><strong>Overview</strong> &mdash; SMS log, test send; <strong>Webhooks</strong> has inbound SMS URL.</li>
         </ol>
-        <div class="guide-note">Server needs <code>SUPABASE_URL</code> + <code>SUPABASE_SERVICE_ROLE_KEY</code>, SMS provider keys (e.g. SMSMobileAPI), and Slack signing secret for buttons.</div>
+        <div class="guide-note"><strong>Campaign PIN:</strong> paste the same value you set as <code>WEBHOOK_TEST_SECRET</code> on the server. It unlocks enroll, branching, and CSV upload from this dashboard (not your Slack token).</div>
+        <div class="guide-note">Server needs <code>SUPABASE_URL</code> + service role, SMS provider keys, <code>SLACK_SIGNING_SECRET</code> for interactive Slack payloads.</div>
       </div>
     </details>
 
@@ -1156,6 +1280,7 @@
     </div>
     <div class="modal-body" id="detailBody"></div>
     <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" onclick="deleteCampaignFromDetail()">Delete campaign</button>
       <button class="btn btn-danger btn-sm" id="toggleActiveBtn" onclick="toggleActive()">Pause</button>
       <button class="btn btn-ghost" onclick="closeModal('detailModal')">Close</button>
       <button class="btn btn-primary" onclick="openEditFromDetail()">Edit settings</button>
@@ -1167,6 +1292,30 @@
 const API = window.location.origin;
 let clients = [];
 let currentDetailClient = null;
+
+function isCampaignDraft(c) {
+  return !(c.slack_bot_token && String(c.slack_bot_token).trim() && c.slack_channel_id && String(c.slack_channel_id).trim());
+}
+
+function setFormWizardStep(n) {
+  const step = Math.max(0, Math.min(3, n));
+  document.getElementById('formWizardStep').value = String(step);
+  for (let i = 0; i <= 3; i++) {
+    const p = document.getElementById('wizard_panel_' + i);
+    if (p) p.classList.toggle('active', i === step);
+    const btn = document.querySelector('.wizard-step[data-wizard="' + i + '"]');
+    if (btn) btn.classList.toggle('active', i === step);
+  }
+  const back = document.getElementById('wizardBackBtn');
+  const next = document.getElementById('wizardNextBtn');
+  if (back) back.style.visibility = step === 0 ? 'hidden' : 'visible';
+  if (next) next.style.display = step >= 3 ? 'none' : 'inline-flex';
+}
+
+function wizardStepDelta(delta) {
+  const cur = parseInt(document.getElementById('formWizardStep').value, 10) || 0;
+  setFormWizardStep(cur + delta);
+}
 
 // ─── Load ────────────────────────────────────────────
 async function loadClients() {
@@ -1182,7 +1331,7 @@ async function loadClients() {
 
 function renderStats() {
   const active = clients.filter(c => c.active).length;
-  const withSlack = clients.filter(c => c.slack_bot_token && c.slack_channel_id).length;
+  const drafts = clients.filter(isCampaignDraft).length;
 
   document.getElementById('stats').innerHTML = `
     <div class="stat-card">
@@ -1194,8 +1343,8 @@ function renderStats() {
       <div class="value" style="color: var(--accent-light)">${active}</div>
     </div>
     <div class="stat-card">
-      <div class="label">Slack wired</div>
-      <div class="value">${withSlack}</div>
+      <div class="label">Drafts</div>
+      <div class="value">${drafts}</div>
     </div>
     <div class="stat-card">
       <div class="label">Paused</div>
@@ -1218,24 +1367,33 @@ function renderGrid() {
     return;
   }
 
-  grid.innerHTML = clients.map(c => `
-    <div class="campaign-card" onclick="openDetail('${c.id}')">
-      <div class="campaign-card-header">
-        <span class="campaign-card-title">${esc(c.name)}</span>
-        <span class="status-badge ${c.active ? 'status-active' : 'status-inactive'}">
-          ${c.active ? 'Running' : 'Paused'}
-        </span>
+  grid.innerHTML = clients.map(c => {
+    const draft = isCampaignDraft(c);
+    return `
+    <div class="campaign-card">
+      <div class="campaign-card-row">
+        <div class="campaign-card-main" onclick="openDetail('${c.id}')">
+          <div class="campaign-card-header">
+            <span class="campaign-card-title">${esc(c.name)}${draft ? '<span class="badge-draft">Draft</span>' : ''}</span>
+            <span class="status-badge ${draft ? 'status-inactive' : (c.active ? 'status-active' : 'status-inactive')}">
+              ${draft ? 'Setup' : (c.active ? 'Running' : 'Paused')}
+            </span>
+          </div>
+          <div class="campaign-card-meta">
+            <span class="${c.slack_bot_token ? 'key-present' : 'key-missing'}">
+              ${c.slack_bot_token ? '&#10003;' : '&#10007;'} Slack
+            </span>
+            <span style="color: var(--text-muted)">
+              Created ${new Date(c.created_at).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+        <div class="campaign-card-actions">
+          <button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();deleteCampaignPrompt('${c.id}')" title="Delete campaign">&#128465;</button>
+        </div>
       </div>
-      <div class="campaign-card-meta">
-        <span class="${c.slack_bot_token ? 'key-present' : 'key-missing'}">
-          ${c.slack_bot_token ? '&#10003;' : '&#10007;'} Slack
-        </span>
-        <span style="color: var(--text-muted)">
-          Created ${new Date(c.created_at).toLocaleDateString()}
-        </span>
-      </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 // ─── Detail tabs ───────────────────────────────────────
@@ -1264,7 +1422,8 @@ function openDetail(id) {
   document.getElementById('detailTitle').textContent = c.name;
   const subEl = document.getElementById('detailSubtitle');
   if (subEl) {
-    subEl.textContent = (c.active ? 'Running' : 'Paused') + ' · ID ' + c.id;
+    const draft = isCampaignDraft(c);
+    subEl.textContent = (draft ? 'Draft · ' : (c.active ? 'Running · ' : 'Paused · ')) + 'ID ' + c.id;
   }
   document.getElementById('toggleActiveBtn').textContent = c.active ? 'Pause campaign' : 'Resume campaign';
 
@@ -1291,8 +1450,8 @@ function openDetail(id) {
             <input type="text" id="sms_preview_phone_${c.id}" placeholder="+15551234567" autocomplete="tel">
           </div>
           <div>
-            <label>Dashboard secret (<code>WEBHOOK_TEST_SECRET</code>)</label>
-            <input type="password" id="sms_action_secret_${c.id}" placeholder="Stored in this browser for enroll / branch actions" autocomplete="off" onchange="sessionStorage.setItem('sms_action_secret', this.value)">
+            <label>Campaign PIN (<code>WEBHOOK_TEST_SECRET</code>)</label>
+            <input type="password" id="sms_action_secret_${c.id}" placeholder="Same as server WEBHOOK_TEST_SECRET — enroll, CSV, branching" autocomplete="off" onchange="sessionStorage.setItem('sms_action_secret', this.value)">
           </div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview</button>
@@ -1474,9 +1633,11 @@ async function toggleActive() {
 // ─── Create / Edit ───────────────────────────────────
 function openCreateModal() {
   document.getElementById('formTitle').textContent = 'New campaign';
-  document.getElementById('formSubmitBtn').textContent = 'Create campaign';
+  document.getElementById('formSubmitBtn').textContent = 'Save campaign';
+  document.getElementById('saveDraftBtn').style.display = 'inline-flex';
   document.getElementById('editClientId').value = '';
   clearForm();
+  setFormWizardStep(0);
   openModal('formModal');
 }
 
@@ -1485,8 +1646,9 @@ function openEditFromDetail() {
   if (!c) return;
   closeModal('detailModal');
 
-  document.getElementById('formTitle').textContent = 'Edit campaign settings';
-  document.getElementById('formSubmitBtn').textContent = 'Save';
+  document.getElementById('formTitle').textContent = 'Edit campaign';
+  document.getElementById('formSubmitBtn').textContent = 'Save campaign';
+  document.getElementById('saveDraftBtn').style.display = 'inline-flex';
   document.getElementById('editClientId').value = c.id;
   document.getElementById('f_name').value = c.name || '';
   document.getElementById('f_slack_bot_token').value = c.slack_bot_token || '';
@@ -1495,10 +1657,11 @@ function openEditFromDetail() {
   document.getElementById('f_sms_free_site_delay_ms').value = (c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000);
   document.getElementById('f_sms_min_gap_between_texts_ms').value = (c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 60000);
 
+  setFormWizardStep(0);
   openModal('formModal');
 }
 
-async function submitForm() {
+async function submitForm(draftOnly) {
   const id = document.getElementById('editClientId').value;
   const data = {
     name: document.getElementById('f_name').value.trim(),
@@ -1509,8 +1672,14 @@ async function submitForm() {
     sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById('f_sms_min_gap_between_texts_ms').value, 10) || 60000),
   };
 
-  if (!data.name || !data.slack_bot_token || !data.slack_channel_id) {
-    toast('Campaign name, Slack bot token, and Slack channel ID are required', 'error');
+  if (!data.name) {
+    toast('Campaign name is required', 'error');
+    return;
+  }
+
+  if (!draftOnly && (!data.slack_bot_token || !data.slack_channel_id)) {
+    toast('Add Slack on step 2, or click Save draft to keep an incomplete campaign', 'error');
+    setFormWizardStep(1);
     return;
   }
 
@@ -1530,12 +1699,36 @@ async function submitForm() {
       throw new Error(err.error || 'Request failed');
     }
 
-    toast(isEdit ? 'Campaign updated' : 'Campaign created', 'success');
+    const okMsg = draftOnly
+      ? (isEdit ? 'Draft saved' : 'Draft created')
+      : (isEdit ? 'Campaign saved' : 'Campaign created');
+    toast(okMsg, 'success');
     closeModal('formModal');
     loadClients();
   } catch (err) {
     toast(err.message, 'error');
   }
+}
+
+async function deleteCampaignPrompt(clientId) {
+  if (!confirm('Delete this campaign and all SMS data tied to it on this server? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`${API}/admin/clients/${clientId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Delete failed');
+    }
+    toast('Campaign deleted', 'success');
+    closeModal('detailModal');
+    loadClients();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteCampaignFromDetail() {
+  if (!currentDetailClient) return;
+  await deleteCampaignPrompt(currentDetailClient.id);
 }
 
 function toggleGuide() {
@@ -1783,7 +1976,7 @@ async function smsCpDeleteBranch(clientId, sourceId, triggerIntent) {
 
 async function smsCpUploadCsv(clientId) {
   const secret = smsCpGetSecret(clientId);
-  if (!secret) { toast('Enter dashboard secret on Overview', 'error'); return; }
+  if (!secret) { toast('Enter Campaign PIN on Overview (same as WEBHOOK_TEST_SECRET)', 'error'); return; }
   const input = document.getElementById(`sms_cp_csv_file_${clientId}`);
   const file = input && input.files && input.files[0];
   if (!file) { toast('Choose a CSV file', 'error'); return; }
@@ -1931,7 +2124,7 @@ function smsCpCollectSteps(clientId) {
 
 async function smsCpNewCampaign(clientId) {
   const secret = smsCpGetSecret(clientId);
-  if (!secret) { toast('Enter dashboard secret on Overview first', 'error'); return; }
+  if (!secret) { toast('Enter Campaign PIN on Overview first', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
   const name = (window.prompt('Sequence name?', 'Outbound sequence') || '').trim() || 'Outbound sequence';
   try {
@@ -1967,7 +2160,7 @@ async function smsCpNewCampaign(clientId) {
 async function smsCpSaveMeta(clientId) {
   const secret = smsCpGetSecret(clientId);
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!secret || !id) { toast('Pick a sequence on the Sequence tab and enter your dashboard secret', 'error'); return; }
+  if (!secret || !id) { toast('Pick a sequence and enter your Campaign PIN on Overview', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
   const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Sequence';
   const active = document.getElementById(`sms_cp_active_${clientId}`).checked;
@@ -2002,7 +2195,7 @@ async function smsCpSaveMeta(clientId) {
 async function smsCpSaveSteps(clientId) {
   const secret = smsCpGetSecret(clientId);
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!secret || !id) { toast('Pick a sequence on the Sequence tab and enter your dashboard secret', 'error'); return; }
+  if (!secret || !id) { toast('Pick a sequence and enter your Campaign PIN on Overview', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
   const steps = smsCpCollectSteps(clientId);
   try {
@@ -2112,7 +2305,7 @@ async function sendTestSms(clientId) {
   const phone = document.getElementById(`sms_preview_phone_${clientId}`)?.value?.trim();
   const secret = document.getElementById(`sms_action_secret_${clientId}`)?.value?.trim() || sessionStorage.getItem('sms_action_secret');
   if (!phone) { toast('Enter phone', 'error'); return; }
-  if (!secret) { toast('Enter WEBHOOK_TEST_SECRET on Overview', 'error'); return; }
+  if (!secret) { toast('Enter Campaign PIN on Overview', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
   let body = (window._smsPreview && window._smsPreview[clientId] && window._smsPreview[clientId].rendered) || '';
   if (!body) {
