@@ -9,6 +9,7 @@ create table if not exists sms_prospect (
   client_id uuid not null,
   phone_e164 text not null,
   business_name text,
+  normalized_name text,
   vertical text,
   city text,
   sent_status text,
@@ -23,8 +24,12 @@ create table if not exists sms_prospect (
   unique (client_id, phone_e164)
 );
 
+-- Existing projects: add the normalized_name column if missing.
+alter table if exists sms_prospect add column if not exists normalized_name text;
+
 create index if not exists idx_sms_prospect_client on sms_prospect (client_id);
 create index if not exists idx_sms_prospect_dnc on sms_prospect (client_id, is_dnc) where is_dnc = true;
+create index if not exists idx_sms_prospect_normalized_name on sms_prospect (normalized_name);
 
 create table if not exists campaign_event_log (
   id uuid primary key default gen_random_uuid(),

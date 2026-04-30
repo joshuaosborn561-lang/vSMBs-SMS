@@ -1242,7 +1242,8 @@
       <button class="btn btn-danger btn-sm" id="toggleActiveBtn" onclick="toggleActive()">Pause</button>
       <button class="btn btn-ghost" onclick="closeModal('detailModal')">Close</button>
       <button class="btn btn-ghost" onclick="saveCampaignFromPanel(true)">Save draft</button>
-      <button class="btn btn-primary" onclick="saveCampaignFromPanel(false)">Save campaign</button>
+      <button class="btn btn-ghost" onclick="saveCampaignFromPanel(false)">Save</button>
+      <button class="btn btn-primary" onclick="launchCampaignFromPanel()">Launch campaign</button>
     </div>
   </div>
 </div>
@@ -1253,14 +1254,16 @@ let clients = [];
 let currentDetailClient = null;
 
 function isCampaignDraft(c) {
-  return !(c.slack_bot_token && String(c.slack_bot_token).trim() && c.slack_channel_id && String(c.slack_channel_id).trim());
+  return String(c.status || '').toLowerCase() === 'draft';
 }
 
 // ─── Load ────────────────────────────────────────────
 async function loadClients() {
   try {
-    const res = await fetch(`${API}/admin/clients`);
-    clients = await res.json();
+    const res = await fetch(`${API}/admin/campaigns`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    clients = j.campaigns || [];
     renderStats();
     renderGrid();
   } catch (err) {
@@ -1269,8 +1272,9 @@ async function loadClients() {
 }
 
 function renderStats() {
-  const active = clients.filter(c => c.active).length;
-  const drafts = clients.filter(isCampaignDraft).length;
+  const live = clients.filter(c => c.status === 'live').length;
+  const drafts = clients.filter(c => c.status === 'draft').length;
+  const paused = clients.filter(c => c.status === 'paused').length;
 
   document.getElementById('stats').innerHTML = `
     <div class="stat-card">
@@ -1278,8 +1282,8 @@ function renderStats() {
       <div class="value">${clients.length}</div>
     </div>
     <div class="stat-card">
-      <div class="label">Running</div>
-      <div class="value" style="color: var(--accent-light)">${active}</div>
+      <div class="label">Live</div>
+      <div class="value" style="color: var(--accent-light)">${live}</div>
     </div>
     <div class="stat-card">
       <div class="label">Drafts</div>
@@ -1287,7 +1291,7 @@ function renderStats() {
     </div>
     <div class="stat-card">
       <div class="label">Paused</div>
-      <div class="value">${clients.length - active}</div>
+      <div class="value">${paused}</div>
     </div>
   `;
 }
@@ -1307,15 +1311,15 @@ function renderGrid() {
   }
 
   grid.innerHTML = clients.map(c => {
-    const draft = isCampaignDraft(c);
+    const draft = c.status === 'draft';
     return `
     <div class="campaign-card">
       <div class="campaign-card-row">
         <div class="campaign-card-main" onclick="openDetail('${c.id}')">
           <div class="campaign-card-header">
             <span class="campaign-card-title">${esc(c.name)}${draft ? '<span class="badge-draft">Draft</span>' : ''}</span>
-            <span class="status-badge ${draft ? 'status-inactive' : (c.active ? 'status-active' : 'status-inactive')}">
-              ${draft ? 'Setup' : (c.active ? 'Running' : 'Paused')}
+            <span class="status-badge ${c.status === 'live' ? 'status-active' : 'status-inactive'}">
+              ${esc((c.status || 'draft').toUpperCase())}
             </span>
           </div>
           <div class="campaign-card-meta">
@@ -1359,10 +1363,9 @@ function openDetail(id) {
   document.getElementById('detailTitle').textContent = c.name;
   const subEl = document.getElementById('detailSubtitle');
   if (subEl) {
-    const draft = isCampaignDraft(c);
-    subEl.textContent = (draft ? 'Draft · ' : (c.active ? 'Running · ' : 'Paused · ')) + 'ID ' + c.id;
+    subEl.textContent = `${(c.status || 'draft').toUpperCase()} · ID ${c.id} · Leads ${c.counts?.staged_leads ?? 0}`;
   }
-  document.getElementById('toggleActiveBtn').textContent = c.active ? 'Pause campaign' : 'Resume campaign';
+  document.getElementById('toggleActiveBtn').textContent = c.status === 'live' ? 'Pause campaign' : 'Resume campaign';
 
   document.getElementById('detailBody').innerHTML = `
     <div class="panel-shell">
@@ -1431,60 +1434,47 @@ function openDetail(id) {
         <div id="ob_sequence_${c.id}" class="ob-panel" role="tabpanel">
     <div class="detail-section">
       <h4>Outbound sequence</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.55">
-        Pick or create an <strong>SMS sequence</strong> below (schedule, steps, enroll). Inbound replies get sentiment; STOP unsubscribes and cancels queued texts.
-      </p>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.55">Write your SMS steps. Use the variable picker to insert merge tags like SmartLead (no guessing).</p>
       <div class="sms-cockpit sms-campaign-ui">
-        <div class="sms-campaign-bar">
-          <div>
-            <label>Sequence</label>
-            <select id="sms_cp_select_${c.id}" onchange="smsCpOnSelect('${c.id}')">
-              <option value="">— loading —</option>
-            </select>
-          </div>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpNewCampaign('${c.id}')">+ New sequence</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpReloadList('${c.id}')">Refresh</button>
-        </div>
-        <div id="sms_cp_editor_${c.id}" style="display:none">
+        <div id="sms_cp_editor_${c.id}">
           <div class="sms-cp-meta">
             <div>
               <label>Sequence name</label>
-              <input type="text" id="sms_cp_name_${c.id}" placeholder="e.g. Cold trade — no site">
+              <input type="text" id="sms_cp_name_${c.id}" value="${esc(c.sequence?.name || c.name || 'Sequence')}" placeholder="e.g. Cold trade — no site">
             </div>
             <div class="sms-cp-active">
-              <label><input type="checkbox" id="sms_cp_active_${c.id}" checked> Active (accept enrollments)</label>
+              <label><input type="checkbox" id="sms_cp_active_${c.id}" ${c.sequence?.status === 'active' ? 'checked' : ''}> Active</label>
             </div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpSaveMeta('${c.id}')">Save name, schedule &amp; caps</button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpSaveSteps('${c.id}')">Save sequence steps</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpAddStep('${c.id}')">+ Add step</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="loadVariableSuggestions('${c.id}')">Refresh variables</button>
           </div>
           <div class="sms-schedule-box" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
             <h5 style="font-size:12px;color:var(--accent-light);margin-bottom:8px">Send window &amp; pacing</h5>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
               <div><label style="font-size:11px;color:var(--text-muted)">Timezone (IANA)</label>
-                <input type="text" id="sms_cp_timezone_${c.id}" placeholder="America/New_York" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <input type="text" id="sms_cp_timezone_${c.id}" value="${esc(c.sequence?.timezone || 'America/New_York')}" placeholder="America/New_York" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
               <div><label style="font-size:11px;color:var(--text-muted)">Window start</label>
-                <input type="text" id="sms_cp_sched_start_${c.id}" placeholder="09:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <input type="text" id="sms_cp_sched_start_${c.id}" value="${esc(c.sequence?.schedule_start || '09:00')}" placeholder="09:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
               <div><label style="font-size:11px;color:var(--text-muted)">Window end</label>
-                <input type="text" id="sms_cp_sched_end_${c.id}" placeholder="17:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <input type="text" id="sms_cp_sched_end_${c.id}" value="${esc(c.sequence?.schedule_end || '17:00')}" placeholder="17:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
               <div><label style="font-size:11px;color:var(--text-muted)">Min gap between sends (ms)</label>
-                <input type="number" id="sms_cp_min_gap_${c.id}" min="0" step="1000" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <input type="number" id="sms_cp_min_gap_${c.id}" min="0" step="1000" value="${c.sequence?.min_gap_between_sends_ms ?? 0}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
               <div><label style="font-size:11px;color:var(--text-muted)">Max sends / day (blank = none)</label>
-                <input type="number" id="sms_cp_max_send_day_${c.id}" min="1" placeholder="∞" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <input type="number" id="sms_cp_max_send_day_${c.id}" min="1" placeholder="∞" value="${c.sequence?.max_sends_per_day ?? ''}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
               <div><label style="font-size:11px;color:var(--text-muted)">Max new enrolls / day</label>
-                <input type="number" id="sms_cp_max_enroll_day_${c.id}" min="1" placeholder="∞" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <input type="number" id="sms_cp_max_enroll_day_${c.id}" min="1" placeholder="∞" value="${c.sequence?.max_new_enrollments_per_day ?? ''}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
             </div>
             <div style="margin-top:10px;font-size:11px;color:var(--text-muted)">Send on weekdays (Luxon: Mon=1 … Sun=7)</div>
             <div id="sms_cp_dow_${c.id}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
             <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--text-muted)">
-              <input type="checkbox" id="sms_cp_exclude_other_${c.id}" checked> Exclude phones already in another <strong>active</strong> sequence
+              <input type="checkbox" id="sms_cp_exclude_other_${c.id}" ${c.sequence?.exclude_other_campaigns === false ? '' : 'checked'}> Exclude phones already in another <strong>active</strong> sequence
             </label>
           </div>
           <div id="sms_cp_steps_${c.id}"></div>
+          <div id="sms_var_suggest_${c.id}" style="display:none;margin-top:10px;font-size:11px;color:var(--text-muted)"></div>
         </div>
-        <div id="sms_cp_empty_${c.id}" style="opacity:0.7;font-size:12px">Select or create a sequence.</div>
       </div>
     </div>
         </div>
@@ -1569,23 +1559,27 @@ function openDetail(id) {
   onboardingStep(c.id, savedStep);
   loadSmsLog(c.id);
   loadMasterInbox();
-  smsCpReloadList(c.id);
+  // Render sequence steps from the unified snapshot
+  smsCpRenderDow(c.id, c.sequence?.schedule_days || [1,2,3,4,5]);
+  smsCpRenderSteps(c.id, (c.sequence && c.sequence.steps && c.sequence.steps.length) ? c.sequence.steps : [{ body_template: '(Draft — write your first SMS for {{business_name}})', delay_after_ms: 86400000 }]);
+  loadVariableSuggestions(c.id);
   smsSupabaseLoadProspects(c.id);
   smsSupabaseLoadEvents(c.id);
 }
 
 async function toggleActive() {
   if (!currentDetailClient) return;
-  const newState = !currentDetailClient.active;
   try {
-    await fetch(`${API}/admin/clients/${currentDetailClient.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: newState }),
-    });
-    toast(`Campaign ${newState ? 'resumed' : 'paused'}`, 'success');
+    const isLive = currentDetailClient.status === 'live';
+    const url = isLive
+      ? `${API}/admin/campaigns/${currentDetailClient.id}/pause`
+      : `${API}/admin/campaigns/${currentDetailClient.id}/resume`;
+    const res = await fetch(url, { method: 'POST' });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    toast(`Campaign ${isLive ? 'paused' : 'resumed'}`, 'success');
     closeModal('detailModal');
-    loadClients();
+    await loadClients();
   } catch (err) {
     toast('Could not update campaign state', 'error');
   }
@@ -1593,7 +1587,7 @@ async function toggleActive() {
 
 async function openCreateCampaign() {
   try {
-    const res = await fetch(`${API}/admin/clients`, {
+    const res = await fetch(`${API}/admin/campaigns`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'New campaign' }),
@@ -1602,7 +1596,7 @@ async function openCreateCampaign() {
     if (!res.ok) throw new Error(j.error || 'Could not create campaign');
     await loadClients();
     openDetail(j.id);
-    toast('Draft created — use the steps to upload leads, sequence, and settings.', 'success');
+    toast('Draft created — upload leads, write sequence, then launch.', 'success');
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -1640,10 +1634,28 @@ async function saveCampaignFromPanel(draftOnly) {
   }
 
   try {
-    const res = await fetch(`${API}/admin/clients/${clientId}`, {
+    const seqSteps = smsCpCollectSteps(clientId);
+    const seqMeta = {
+      name: document.getElementById(`sms_cp_name_${clientId}`)?.value?.trim() || (data.name || 'Sequence'),
+      active: !!document.getElementById(`sms_cp_active_${clientId}`)?.checked,
+      timezone: document.getElementById(`sms_cp_timezone_${clientId}`)?.value?.trim() || 'America/New_York',
+      schedule_start: document.getElementById(`sms_cp_sched_start_${clientId}`)?.value?.trim() || '09:00',
+      schedule_end: document.getElementById(`sms_cp_sched_end_${clientId}`)?.value?.trim() || '17:00',
+      schedule_days: smsCpCollectDow(clientId),
+      min_gap_between_sends_ms: parseInt(document.getElementById(`sms_cp_min_gap_${clientId}`)?.value, 10) || 0,
+      max_sends_per_day: (() => { const v = document.getElementById(`sms_cp_max_send_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
+      max_new_enrollments_per_day: (() => { const v = document.getElementById(`sms_cp_max_enroll_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
+      exclude_other_campaigns: document.getElementById(`sms_cp_exclude_other_${clientId}`)?.checked !== false,
+    };
+
+    const res = await fetch(`${API}/admin/campaigns/${clientId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        draft: !!draftOnly,
+        workspace: data,
+        sequence: { meta: seqMeta, steps: seqSteps },
+      }),
     });
     const updated = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(updated.error || 'Save failed');
@@ -1653,27 +1665,10 @@ async function saveCampaignFromPanel(draftOnly) {
     document.getElementById('detailTitle').textContent = updated.name;
     const subEl = document.getElementById('detailSubtitle');
     if (subEl) {
-      const draft = isCampaignDraft(updated);
-      subEl.textContent = (draft ? 'Draft · ' : (updated.active ? 'Running · ' : 'Paused · ')) + 'ID ' + updated.id;
+      subEl.textContent = `${(updated.status || 'draft').toUpperCase()} · ID ${updated.id} · Leads ${updated.counts?.staged_leads ?? 0}`;
     }
 
-    let seqNote = '';
-    try {
-      const seqResult = await smsCpPersistSequenceSnapshot(clientId, { forceDraft: draftOnly });
-      if (seqResult.saved) {
-        seqNote = draftOnly ? ' Sequence saved as draft.' : ' Sequence saved.';
-      }
-    } catch (seqErr) {
-      seqNote = ` (${seqErr.message || 'sequence not saved'} — pick a sequence on step 2 or check dashboard secret)`;
-    }
-
-    const stillDraft = isCampaignDraft(updated);
-    if (draftOnly || stillDraft) {
-      toast((stillDraft ? 'Saved (still Draft — add Slack to go live)' : 'Draft saved') + seqNote, 'success');
-      if (!draftOnly && stillDraft) onboardingStep(clientId, 'settings');
-    } else {
-      toast('Campaign saved' + seqNote, 'success');
-    }
+    toast(draftOnly ? 'Draft saved' : 'Saved', 'success');
     renderStats();
     renderGrid();
   } catch (err) {
@@ -1715,19 +1710,62 @@ async function loadMasterInbox() {
 }
 
 async function deleteCampaignPrompt(clientId) {
-  if (!confirm('Delete this campaign and all SMS data tied to it on this server? This cannot be undone.')) return;
+  if (!confirm('Archive this campaign? It will disappear from the dashboard and stop sending.')) return;
   try {
-    const res = await fetch(`${API}/admin/clients/${clientId}`, { method: 'DELETE' });
+    const res = await fetch(`${API}/admin/campaigns/${clientId}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Delete failed');
+      throw new Error(err.error || 'Archive failed');
     }
-    toast('Campaign deleted', 'success');
+    toast('Campaign archived', 'success');
     closeModal('detailModal');
     loadClients();
   } catch (e) {
     toast(e.message, 'error');
   }
+}
+
+async function launchCampaignFromPanel() {
+  const c = currentDetailClient;
+  if (!c) return;
+  try {
+    const res = await fetch(`${API}/admin/campaigns/${c.id}/launch`, { method: 'POST' });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'Launch failed');
+    toast(`Launched · enrolled ${j.summary?.enrolled || 0}`, 'success');
+    closeModal('detailModal');
+    await loadClients();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ─── Variable suggestions + inserter ─────────────────
+let _varSuggestions = {};
+async function loadVariableSuggestions(clientId) {
+  try {
+    const res = await fetch(`${API}/admin/campaigns/${clientId}/variables`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    _varSuggestions[clientId] = j.variables || [];
+    const el = document.getElementById(`sms_var_suggest_${clientId}`);
+    if (el) el.style.display = 'none';
+  } catch (e) {
+    // ignore
+  }
+}
+
+function insertVarAtCaret(textarea, token) {
+  if (!textarea) return;
+  const t = textarea;
+  const start = t.selectionStart || 0;
+  const end = t.selectionEnd || 0;
+  const before = t.value.slice(0, start);
+  const after = t.value.slice(end);
+  t.value = before + token + after;
+  const pos = start + token.length;
+  t.selectionStart = t.selectionEnd = pos;
+  t.focus();
 }
 
 async function deleteCampaignFromDetail() {
@@ -1819,22 +1857,21 @@ function smsCpEnsureStore(clientId) {
   return window._smsCp[clientId];
 }
 
+function smsCpPrimaryId(clientId) {
+  const c = clients.find((x) => x.id === clientId);
+  return c && c.sequence && c.sequence.id ? c.sequence.id : null;
+}
+
 async function smsCpReloadList(clientId) {
   const sel = document.getElementById(`sms_cp_select_${clientId}`);
   if (!sel) return;
   sel.innerHTML = '<option value="">Loading…</option>';
   try {
-    const res = await fetch(`${API}/admin/sms/campaigns/${clientId}`);
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error || 'Failed to load campaigns');
-    const list = j.campaigns || [];
-    smsCpEnsureStore(clientId).list = list;
-    sel.innerHTML = '<option value="">— choose campaign —</option>' +
-      list.map(c =>
-        `<option value="${c.id}">${esc(c.name)}${c.active ? '' : ' (paused)'}</option>`
-      ).join('');
-    const cur = smsCpEnsureStore(clientId).campaignId;
-    if (cur && list.some(x => x.id === cur)) sel.value = cur;
+    const id = smsCpPrimaryId(clientId);
+    if (!id) throw new Error('No primary sequence');
+    smsCpEnsureStore(clientId).campaignId = id;
+    sel.innerHTML = `<option value="${id}">Primary sequence</option>`;
+    sel.value = id;
   } catch (e) {
     sel.innerHTML = '<option value="">Error</option>';
     toast(e.message, 'error');
@@ -2054,6 +2091,11 @@ function smsCpRenderSteps(clientId, steps) {
     const del = s.delay_after_ms != null ? Number(s.delay_after_ms) : 86400000;
     return `<div class="sms-step-block" data-step-index="${i}">
       <h5>Step ${ord}${ord < steps.length ? ' · wait after this step before next' : ' · final step'}</h5>
+      <div style="display:flex;justify-content:flex-end;gap:8px;align-items:center;margin:-4px 0 8px">
+        <select class="sms-var-picker" data-client="${clientId}" data-step="${i}" onchange="onVarPickerChange(this)">
+          <option value="">+ Insert variable…</option>
+        </select>
+      </div>
       <textarea class="sms_cp_step_body" placeholder="Message body with {{variables}}">${body}</textarea>
       <div class="delay-row">
         <div><label style="font-size:11px;color:var(--text-muted)">Delay after this step (ms)</label>
@@ -2062,6 +2104,24 @@ function smsCpRenderSteps(clientId, steps) {
       </div>
     </div>`;
   }).join('');
+
+  // Populate variable pickers from cached suggestions.
+  const vars = _varSuggestions[clientId] || [];
+  wrap.querySelectorAll('select.sms-var-picker').forEach((sel) => {
+    const opts = ['<option value=\"\">+ Insert variable…</option>']
+      .concat(vars.map((v) => `<option value=\"{{${esc(v)}}}\">{{${esc(v)}}}</option>`));
+    sel.innerHTML = opts.join('');
+  });
+}
+
+function onVarPickerChange(selectEl) {
+  const sel = selectEl;
+  const token = sel.value;
+  if (!token) return;
+  const block = sel.closest('.sms-step-block');
+  const ta = block ? block.querySelector('textarea.sms_cp_step_body') : null;
+  insertVarAtCaret(ta, token);
+  sel.value = '';
 }
 
 function smsCpAddStep(clientId) {
@@ -2113,7 +2173,8 @@ function smsCpCollectSteps(clientId) {
 }
 
 async function smsCpNewCampaign(clientId) {
-  const name = (window.prompt('Sequence name?', 'Outbound sequence') || '').trim() || 'Outbound sequence';
+  toast('This app uses one primary sequence per campaign. Use branching under Leads if needed.', 'error');
+  return;
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}`, {
       method: 'POST',

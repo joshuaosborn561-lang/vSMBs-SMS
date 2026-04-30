@@ -22,6 +22,7 @@ function mapSbProspect(r) {
     client_id: r.client_id,
     phone_e164: r.phone_e164,
     business_name: r.business_name,
+    normalized_name: r.normalized_name || null,
     vertical: r.vertical,
     city: r.city,
     sent_status: r.sent_status,
@@ -43,6 +44,7 @@ function prospectRowToVariables(row) {
   const base = {
     phone: row.phone_e164 || '',
     business_name: row.business_name || '',
+    normalized_name: row.normalized_name || '',
     vertical: row.vertical || '',
     city: row.city || '',
     sent_status: row.sent_status || '',
@@ -117,6 +119,7 @@ async function upsertProspect(clientId, fields) {
     client_id: clientId,
     phone_e164: phone,
     business_name: fields.business_name !== undefined ? fields.business_name : existingRow?.business_name ?? null,
+    normalized_name: fields.normalized_name !== undefined ? fields.normalized_name : existingRow?.normalized_name ?? null,
     vertical: fields.vertical !== undefined ? fields.vertical : existingRow?.vertical ?? null,
     city: fields.city !== undefined ? fields.city : existingRow?.city ?? null,
     sent_status: fields.sent_status !== undefined ? fields.sent_status : existingRow?.sent_status ?? null,
@@ -142,7 +145,7 @@ async function patchOrCreateProspect(clientId, rawPhone, patch) {
   const phone = normalizePhoneDisplay(rawPhone);
   if (!phone) return null;
   const scalar = {};
-  const scalars = ['business_name', 'vertical', 'city', 'sent_status', 'reply', 'intent', 'site_url', 'customer_status'];
+  const scalars = ['business_name', 'normalized_name', 'vertical', 'city', 'sent_status', 'reply', 'intent', 'site_url', 'customer_status'];
   for (const k of scalars) {
     if (patch[k] !== undefined) scalar[k] = patch[k];
   }
@@ -167,7 +170,7 @@ async function patchProspectFields(clientId, rawPhone, patch) {
   if (patch.dnc !== undefined) {
     updates.is_dnc = patch.dnc === true || patch.dnc === 'yes' || patch.dnc === 'true';
   }
-  const scalars = ['business_name', 'vertical', 'city', 'sent_status', 'reply', 'intent', 'site_url', 'customer_status'];
+  const scalars = ['business_name', 'normalized_name', 'vertical', 'city', 'sent_status', 'reply', 'intent', 'site_url', 'customer_status'];
   for (const k of scalars) {
     if (patch[k] !== undefined) updates[k] = patch[k];
   }
@@ -214,6 +217,7 @@ async function appendDnc(clientId, rawPhone, reason) {
 
 async function upsertManyFromCsvRows(clientId, rows) {
   let upserted = 0;
+  const supabaseHasNormalizedName = await hasNormalizedNameColumn();
   for (const obj of rows) {
     const phone = String(obj.phone || obj.phone_e164 || '').trim();
     if (!phone) continue;
@@ -221,6 +225,7 @@ async function upsertManyFromCsvRows(clientId, rows) {
     delete extra.phone;
     delete extra.phone_e164;
     delete extra.business_name;
+    delete extra.normalized_name;
     delete extra.vertical;
     delete extra.city;
     delete extra.sent_status;
@@ -232,10 +237,16 @@ async function upsertManyFromCsvRows(clientId, rows) {
     if (obj.upload_source != null && obj.upload_source !== '') {
       extra.upload_source = obj.upload_source;
     }
+    // If Supabase doesn't have normalized_name yet, fall back to extra so
+    // {{normalized_name}} still resolves at render time.
+    if (!supabaseHasNormalizedName && obj.normalized_name != null && obj.normalized_name !== '') {
+      extra.normalized_name = obj.normalized_name;
+    }
 
     await upsertProspect(clientId, {
       phone_e164: phone,
       business_name: obj.business_name,
+      normalized_name: supabaseHasNormalizedName ? obj.normalized_name : undefined,
       vertical: obj.vertical,
       city: obj.city,
       sent_status: obj.sent_status,
@@ -248,6 +259,24 @@ async function upsertManyFromCsvRows(clientId, rows) {
     upserted += 1;
   }
   return upserted;
+}
+
+let _normalizedNameColumnCache = null;
+async function hasNormalizedNameColumn() {
+  if (_normalizedNameColumnCache != null) return _normalizedNameColumnCache;
+  const sb = getSupabase();
+  if (!sb) return false;
+  try {
+    const { error } = await sb.from('sms_prospect').select('normalized_name').limit(1);
+    _normalizedNameColumnCache = !error;
+  } catch (e) {
+    _normalizedNameColumnCache = false;
+  }
+  return _normalizedNameColumnCache;
+}
+
+function _resetNormalizedNameColumnCache() {
+  _normalizedNameColumnCache = null;
 }
 
 async function listProspects(clientId, limit = 500) {
@@ -263,6 +292,16 @@ async function listProspects(clientId, limit = 500) {
   return (data || []).map(mapSbProspect);
 }
 
+async function countProspects(clientId) {
+  const sb = requireSupabase();
+  const { count, error } = await sb
+    .from('sms_prospect')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId);
+  if (error) throw new Error(error.message);
+  return Number(count || 0);
+}
+
 module.exports = {
   supabaseConfigured,
   findProspectByPhone,
@@ -276,4 +315,7 @@ module.exports = {
   upsertManyFromCsvRows,
   listProspects,
   normalizePhoneDisplay,
+  hasNormalizedNameColumn,
+  _resetNormalizedNameColumnCache,
+  countProspects,
 };
