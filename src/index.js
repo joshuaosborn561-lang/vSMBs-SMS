@@ -51,5 +51,11 @@ const port = Number(PORT) || 3000;
 const listenHost = process.env.LISTEN_HOST || '0.0.0.0';
 app.listen(port, listenHost, () => {
   console.log(`[Server] ReplyHandler listening on ${listenHost}:${port}`);
-  startCron();
+  setImmediate(() => {
+    try {
+      startCron();
+    } catch (err) {
+      console.error('[Cron] failed to start', err);
+    }
+  });
 });
