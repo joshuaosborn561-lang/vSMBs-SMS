@@ -171,6 +171,20 @@ async function listLog(clientId, limit = 100) {
   return rows;
 }
 
+/** Recent SMS across all campaigns (master inbox) */
+async function listLogMaster(limit = 80) {
+  const lim = Math.min(200, Math.max(1, limit));
+  const { rows } = await db.query(
+    `SELECT l.*, c.name AS campaign_name
+     FROM sms_message_log l
+     JOIN clients c ON c.id = l.client_id
+     ORDER BY COALESCE(l.sent_at, l.created_at) DESC NULLS LAST
+     LIMIT $1`,
+    [lim]
+  );
+  return rows;
+}
+
 module.exports = {
   logInbound,
   updateInboundMeta,
@@ -179,6 +193,7 @@ module.exports = {
   logOutboundFailed,
   sendSmsLogged,
   listLog,
+  listLogMaster,
   computeDelayMsSinceLastOutbound,
   invalidateClientMinGapCache,
 };

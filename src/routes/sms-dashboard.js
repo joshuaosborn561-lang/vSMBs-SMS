@@ -10,6 +10,18 @@ const DEFAULT_FREE_SITE = "I actually made you a site for free — want me to se
 
 const { dashboardSecretOk } = require('../utils/dashboard-secret');
 
+/** GET /admin/sms/log — master inbox (all campaigns), newest first */
+router.get('/admin/sms/log', async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 80));
+    const rows = await smsLog.listLogMaster(limit);
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[SMS Dashboard] master log', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** GET /admin/sms/log/:clientId — timeline of SMS in/out with delays */
 router.get('/admin/sms/log/:clientId', async (req, res) => {
   try {
