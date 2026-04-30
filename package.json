@@ -8,7 +8,9 @@
     "dev": "node --watch src/index.js",
     "provision:supabase": "node scripts/provision-reply-handler-supabase.mjs",
     "migrate:railway": "node scripts/apply-railway-migrations.mjs",
-    "railway:vars": "node scripts/list-railway-service-vars.mjs"
+    "railway:vars": "node scripts/list-railway-service-vars.mjs",
+    "railway:deploy": "node scripts/trigger-railway-deploy.mjs",
+    "railway:status": "node scripts/railway-deployment-status.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",

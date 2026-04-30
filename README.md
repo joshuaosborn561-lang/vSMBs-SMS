@@ -21,6 +21,8 @@ HeyReach Webhook ──┘                            │
 
 ```bash
 npm run railway:vars    # list keys + redacted previews (verify presence)
+npm run railway:deploy  # trigger a new deploy (GraphQL: serviceInstanceDeployV2)
+npm run railway:status  # latest deployment id + Railway status
 # Bulk-set from a local file (never commit the file):
 SKIP_DEPLOY=true node scripts/railway-upsert-env-file.mjs ./my-secrets.env
 ```
