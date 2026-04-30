@@ -7,10 +7,20 @@ const { listCampaignEvents } = require('../services/campaign-log');
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  // CSV lead lists can be large; keep in-memory but allow a bigger cap.
+  // If this cap is hit, we return JSON via the error handler below.
+  limits: { fileSize: 25 * 1024 * 1024 },
 });
 
 const { dashboardSecretOk } = require('../utils/dashboard-secret');
+
+function jsonMulterError(err, _req, res, next) {
+  if (!err) return next();
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'CSV too large (max 25MB)' });
+  }
+  return res.status(400).json({ error: err.message || 'Upload failed' });
+}
 
 /** GET /admin/sms/campaigns/:clientId */
 router.get('/admin/sms/campaigns/:clientId', async (req, res) => {
@@ -198,7 +208,7 @@ router.delete('/admin/sms/transition/:clientId/:sourceCampaignId/:triggerIntent'
 });
 
 /** CSV upload → staged leads (phone column required); merges extra columns into variables */
-router.post('/admin/sms/staged-leads/:clientId/csv', upload.single('file'), async (req, res) => {
+router.post('/admin/sms/staged-leads/:clientId/csv', upload.single('file'), jsonMulterError, async (req, res) => {
   if (!dashboardSecretOk(req)) {
     return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
   }
@@ -292,6 +302,22 @@ router.get('/admin/sms/prospects/:clientId', async (req, res) => {
     console.error('[SMS Campaign] prospects list', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Ensure upload/multipart errors return JSON (avoid Express default HTML error pages).
+// This specifically fixes the dashboard seeing `<!doctype ...>` when a CSV upload fails.
+router.use((err, _req, res, next) => {
+  if (!err) return next();
+  const isMulter = err && (err instanceof multer.MulterError || err.name === 'MulterError');
+  if (isMulter) {
+    const code = err.code || 'UPLOAD_ERROR';
+    const message =
+      code === 'LIMIT_FILE_SIZE'
+        ? 'CSV too large (max 25MB)'
+        : (err.message || 'Upload error');
+    return res.status(400).json({ error: message, code });
+  }
+  return res.status(500).json({ error: err.message || 'Server error' });
 });
 
 module.exports = router;
