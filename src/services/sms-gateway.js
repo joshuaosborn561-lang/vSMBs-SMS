@@ -27,7 +27,8 @@ async function sendSms({ to, body, port, sIdentifiant } = {}) {
 
   const simPort =
     normalizeSimPort(port) ??
-    normalizeSimPort(process.env.SMSMOBILEAPI_PORT);
+    normalizeSimPort(process.env.SMSMOBILEAPI_PORT) ??
+    '1';
   const deviceSid =
     normalizeDeviceSid(sIdentifiant) ??
     normalizeDeviceSid(process.env.SMSMOBILEAPI_SIDENTIFIANT);

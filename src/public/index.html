@@ -1620,10 +1620,9 @@ async function openDetail(id) {
         </div>
         <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--border)">
           <label>SMS gateway — SIM slot (this campaign)</label>
-          <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;line-height:1.5">SMSMobileAPI sends on the device’s default SIM unless you set a slot. Use <strong>SIM 1</strong> or <strong>SIM 2</strong> to match the physical card you want (see <a href="https://smsmobileapi.com/doc" target="_blank" rel="noopener">API docs</a> — parameter <code>port</code>).</p>
+          <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;line-height:1.5">Defaults to <strong>SIM 1</strong>. Pick <strong>SIM 2</strong> if your second card should send (see <a href="https://smsmobileapi.com/doc" target="_blank" rel="noopener">API docs</a> — parameter <code>port</code>).</p>
           <select id="panel_f_sim_${c.id}" style="width:100%;max-width:320px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:13px">
-            <option value="" ${c.sms_gateway_port != 1 && c.sms_gateway_port != 2 ? 'selected' : ''}>Auto — first available SIM</option>
-            <option value="1" ${Number(c.sms_gateway_port) === 1 ? 'selected' : ''}>SIM slot 1</option>
+            <option value="1" ${Number(c.sms_gateway_port) !== 2 ? 'selected' : ''}>SIM slot 1 (default)</option>
             <option value="2" ${Number(c.sms_gateway_port) === 2 ? 'selected' : ''}>SIM slot 2</option>
           </select>
         </div>
@@ -1727,7 +1726,7 @@ async function openCreateCampaign() {
 function readPanelCampaignPayload(clientId) {
   const nameEl = document.getElementById(`panel_f_name_${clientId}`);
   const simSel = document.getElementById(`panel_f_sim_${clientId}`);
-  const simRaw = simSel && simSel.value !== '' ? parseInt(simSel.value, 10) : null;
+  const simRaw = simSel ? parseInt(simSel.value, 10) : 1;
   const sidEl = document.getElementById(`panel_f_sid_${clientId}`);
   const sidTrim = (sidEl && sidEl.value.trim()) || '';
   return {
@@ -1737,7 +1736,7 @@ function readPanelCampaignPayload(clientId) {
     sms_free_site_body: (document.getElementById(`panel_f_body_${clientId}`)?.value || '').trim() || null,
     sms_free_site_delay_ms: Math.max(0, (parseInt(document.getElementById(`panel_f_delay_${clientId}`)?.value, 10) || 20) * 1000),
     sms_min_gap_between_texts_ms: Math.max(0, (parseInt(document.getElementById(`panel_f_gap_${clientId}`)?.value, 10) || 60) * 1000),
-    sms_gateway_port: simRaw === 1 || simRaw === 2 ? simRaw : null,
+    sms_gateway_port: simRaw === 2 ? 2 : 1,
     sms_gateway_device_sid: sidTrim || null,
   };
 }

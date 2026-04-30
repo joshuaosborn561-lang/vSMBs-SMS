@@ -6,11 +6,12 @@ async function getSmsGatewayOptionsForClient(clientId) {
     `SELECT sms_gateway_port, sms_gateway_device_sid FROM clients WHERE id = $1`,
     [clientId]
   );
-  if (!row) return {};
-  const port = row.sms_gateway_port != null ? Number(row.sms_gateway_port) : null;
+  if (!row) return { port: 1 };
+  const rawPort = row.sms_gateway_port != null ? Number(row.sms_gateway_port) : 1;
+  const port = rawPort === 2 ? 2 : 1;
   const sid = row.sms_gateway_device_sid != null ? String(row.sms_gateway_device_sid).trim() : '';
   return {
-    port: port === 1 || port === 2 ? port : undefined,
+    port,
     sIdentifiant: sid || undefined,
   };
 }
