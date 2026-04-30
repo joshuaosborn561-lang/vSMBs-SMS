@@ -850,6 +850,42 @@
       vertical-align: top;
     }
     .sms-log-table th { color: var(--text-muted); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+
+    .leads-preview-toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px;
+      font-size: 12px; color: var(--text-muted);
+    }
+    .leads-preview-scroll {
+      overflow: auto;
+      max-height: min(52vh, 420px);
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    .leads-preview-table {
+      border-collapse: collapse;
+      font-size: 12px;
+      white-space: nowrap;
+      min-width: max-content;
+    }
+    .leads-preview-table th,
+    .leads-preview-table td {
+      padding: 7px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .leads-preview-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface-2);
+      box-shadow: 0 1px 0 var(--border);
+    }
+    .leads-preview-table tbody tr:hover td { background: rgba(45, 106, 63, 0.04); }
     .sms-log-dir { font-weight: 600; }
     .sms-log-dir.in { color: var(--accent-light); }
     .sms-log-dir.out { color: var(--yellow); }
@@ -1460,6 +1496,17 @@ async function openDetail(id) {
       </div>
       <p style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">When you are ready to send to everyone on the list, use <strong>Launch campaign</strong> in the footer (after you write your texts in step 2).</p>
 
+      <h4 style="margin-top:20px;margin-bottom:6px;font-size:14px">Preview leads</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.55">Every contact in this campaign (Supabase). Scroll sideways to see CSV columns stored in <code>extra</code>. Large lists load in pages.</p>
+      <div class="leads-preview-toolbar" id="leads_preview_toolbar_${c.id}">
+        <button type="button" class="btn btn-primary btn-sm" onclick="smsLeadsPreviewLoad('${c.id}', true)">Load / refresh preview</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="leads_preview_more_${c.id}" style="display:none" onclick="smsLeadsPreviewMore('${c.id}')">Load next page</button>
+        <span id="leads_preview_meta_${c.id}"></span>
+      </div>
+      <div class="leads-preview-scroll" id="sms_leads_preview_${c.id}">
+        <p style="padding:14px;font-size:13px;color:var(--text-muted);margin:0">Click <strong>Load / refresh preview</strong> to fetch leads and total count.</p>
+      </div>
+
       <details class="sms-upload-advanced" style="margin-top:20px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface-2)" ontoggle="onUploadAdvancedToggle(event, '${c.id}')">
         <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text)">Advanced — only if you need it</summary>
         <div style="margin-top:14px;font-size:12px;color:var(--text-muted);line-height:1.65">
@@ -1490,12 +1537,12 @@ async function openDetail(id) {
           <div id="sms_cp_jobs_${c.id}" class="sms-cp-jobs" style="margin-top:8px"></div>
 
           <h5 style="margin:20px 0 8px;font-size:12px;color:var(--text-muted)">Data check (Supabase)</h5>
-          <p style="margin-bottom:8px;font-size:11px">A read-only peek at what is stored for this campaign — useful for debugging.</p>
+          <p style="margin-bottom:8px;font-size:11px">Campaign contacts are in <strong>Preview leads</strong> above. Here: activity log only.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadProspects('${c.id}')">Load contacts</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsLeadsPreviewLoad('${c.id}', true)">Refresh lead preview</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Load activity log</button>
           </div>
-          <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="max-height:180px"></div>
+          <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="display:none" aria-hidden="true"></div>
           <div id="sms_sb_events_${c.id}" class="sms-cp-jobs" style="max-height:160px;margin-top:10px"></div>
         </div>
       </details>
@@ -2125,7 +2172,7 @@ async function smsCpUploadCsv(clientId) {
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Upload failed');
     toast(`Imported ${j.imported} prospects (Supabase)`, 'success');
-    smsSupabaseLoadProspects(clientId);
+    smsLeadsPreviewLoad(clientId, true);
     await loadVariableSuggestions(clientId);
     input.value = '';
   } catch (e) {
@@ -2135,35 +2182,129 @@ async function smsCpUploadCsv(clientId) {
 
 async function smsCpStagedCount(clientId) {
   try {
-    const res = await fetch(`${API}/admin/sms/staged-leads/${clientId}?limit=5000`);
+    const res = await fetch(`${API}/admin/sms/prospects/${clientId}?limit=1&offset=0`);
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Failed');
-    toast(`${(j.leads || []).length} lead row(s) in Supabase`, 'success');
+    const n = typeof j.total === 'number' ? j.total : (j.prospects || []).length;
+    toast(`${n} lead(s) in this campaign (Supabase)`, 'success');
   } catch (e) {
     toast(e.message, 'error');
   }
 }
 
-async function smsSupabaseLoadProspects(clientId) {
-  const el = document.getElementById(`sms_sb_prospects_${clientId}`);
-  if (!el) return;
-  el.innerHTML = 'Loading…';
+const _LEADS_PREVIEW_PAGE = 1000;
+const _leadsPreviewState = {};
+
+function smsLeadsPreviewExtraKeys(row) {
+  const ex = row && row.extra && typeof row.extra === 'object' ? row.extra : {};
+  return Object.keys(ex).map((k) => String(k).trim()).filter(Boolean);
+}
+
+function smsLeadsPreviewBuildColumns(rows) {
+  const core = [
+    'phone_e164', 'business_name', 'normalized_name', 'vertical', 'city',
+    'sent_status', 'reply', 'intent', 'site_url', 'customer_status',
+    'is_dnc', 'created_at', 'updated_at', 'id',
+  ];
+  const extra = new Set();
+  (rows || []).forEach((r) => smsLeadsPreviewExtraKeys(r).forEach((k) => extra.add(k)));
+  const extraSorted = Array.from(extra).sort((a, b) => a.localeCompare(b));
+  return core.concat(extraSorted.map((k) => 'extra:' + k));
+}
+
+function smsLeadsPreviewCell(row, col) {
+  if (col.startsWith('extra:')) {
+    const k = col.slice(6);
+    const ex = row.extra && typeof row.extra === 'object' ? row.extra : {};
+    const v = ex[k];
+    if (v == null) return '';
+    if (typeof v === 'object') return esc(JSON.stringify(v));
+    return esc(String(v));
+  }
+  const v = row[col];
+  if (col === 'is_dnc') return v ? 'yes' : '';
+  if ((col === 'created_at' || col === 'updated_at') && v) {
+    try { return esc(new Date(v).toLocaleString()); } catch (e) { return esc(String(v)); }
+  }
+  if (v == null) return '';
+  return esc(String(v));
+}
+
+function smsLeadsPreviewThLabel(col) {
+  if (col.startsWith('extra:')) return 'extra · ' + esc(col.slice(6));
+  if (col === 'phone_e164') return 'Phone';
+  if (col === 'is_dnc') return 'DNC';
+  return esc(col.replace(/_/g, ' '));
+}
+
+function smsLeadsPreviewRenderTable(columns, rows) {
+  if (!rows.length) {
+    return '<p style="padding:14px;font-size:13px;color:var(--text-muted);margin:0">No leads yet — upload a CSV above.</p>';
+  }
+  const thead = '<tr>' + columns.map((c) => `<th>${smsLeadsPreviewThLabel(c)}</th>`).join('') + '</tr>';
+  const tbody = rows.map((r) =>
+    '<tr>' + columns.map((c) => `<td>${smsLeadsPreviewCell(r, c)}</td>`).join('') + '</tr>'
+  ).join('');
+  return '<table class="leads-preview-table"><thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table>';
+}
+
+async function smsLeadsPreviewLoad(clientId, reset) {
+  const wrap = document.getElementById(`sms_leads_preview_${clientId}`);
+  const metaEl = document.getElementById(`leads_preview_meta_${clientId}`);
+  const moreBtn = document.getElementById(`leads_preview_more_${clientId}`);
+  if (!wrap) return;
+
+  let st = _leadsPreviewState[clientId];
+  if (!st || reset) {
+    st = { rows: [], total: null, columns: [] };
+    _leadsPreviewState[clientId] = st;
+  }
+
+  const fetchOffset = reset ? 0 : st.rows.length;
+  if (reset) {
+    st.rows = [];
+    st.total = null;
+    st.columns = [];
+    wrap.innerHTML = '<p style="padding:14px;font-size:13px;color:var(--text-muted)">Loading…</p>';
+  } else if (metaEl) {
+    metaEl.textContent = (metaEl.textContent || '') + ' · Loading more…';
+  }
+
   try {
-    const res = await fetch(`${API}/admin/sms/prospects/${clientId}?limit=80`);
+    const res = await fetch(`${API}/admin/sms/prospects/${clientId}?limit=${_LEADS_PREVIEW_PAGE}&offset=${fetchOffset}`);
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Failed');
-    const rows = j.prospects || [];
-    if (!rows.length) {
-      el.innerHTML = '<span style="opacity:0.6">No prospects yet — upload CSV above.</span>';
-      return;
+    const batch = j.prospects || [];
+    if (typeof j.total === 'number') st.total = j.total;
+    st.rows = st.rows.concat(batch);
+    st.columns = smsLeadsPreviewBuildColumns(st.rows);
+    wrap.innerHTML = smsLeadsPreviewRenderTable(st.columns, st.rows);
+
+    const shown = st.rows.length;
+    const total = st.total;
+    if (metaEl) {
+      if (total != null) {
+        metaEl.textContent = `Showing ${shown} of ${total} lead(s). Scroll horizontally for all columns.`;
+      } else {
+        metaEl.textContent = `Showing ${shown} lead(s). Scroll horizontally for all columns.`;
+      }
     }
-    el.innerHTML = '<table class="sms-log-table"><thead><tr><th>Phone</th><th>DNC</th><th>Business</th><th>City</th><th>Updated</th></tr></thead><tbody>' +
-      rows.map(r =>
-        `<tr><td>${esc(r.phone_e164)}</td><td>${r.is_dnc ? 'yes' : ''}</td><td>${esc(r.business_name || '')}</td><td>${esc(r.city || '')}</td><td>${r.updated_at ? new Date(r.updated_at).toLocaleString() : ''}</td></tr>`
-      ).join('') + '</tbody></table>';
+    if (moreBtn) {
+      const hasMore = j.has_more === true || (total != null && shown < total) || batch.length === _LEADS_PREVIEW_PAGE;
+      moreBtn.style.display = hasMore ? 'inline-block' : 'none';
+    }
   } catch (e) {
-    el.innerHTML = '<span style="color:var(--red)">' + esc(e.message) + '</span>';
+    wrap.innerHTML = '<p style="padding:14px;color:var(--red);margin:0">' + esc(e.message) + '</p>';
+    if (moreBtn) moreBtn.style.display = 'none';
   }
+}
+
+function smsLeadsPreviewMore(clientId) {
+  smsLeadsPreviewLoad(clientId, false);
+}
+
+async function smsSupabaseLoadProspects(clientId) {
+  await smsLeadsPreviewLoad(clientId, true);
 }
 
 async function smsSupabaseLoadEvents(clientId) {

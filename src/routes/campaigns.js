@@ -311,8 +311,7 @@ router.post('/admin/campaigns/:clientId/launch', async (req, res) => {
     );
 
     // Enroll all staged leads
-    const allProspects = await prospects.listProspects(clientId, 5000);
-    const phones = allProspects.map((p) => p.phone_e164).filter(Boolean);
+    const phones = await prospects.listProspectPhoneNumbers(clientId);
     const summary = await smsCampaign.enrollLeads(clientId, full.sequence.id, phones);
 
     const refreshed = await loadFullCampaign(clientId);

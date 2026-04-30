@@ -296,8 +296,18 @@ router.get('/admin/sms/campaign-events/:clientId', async (req, res) => {
 
 router.get('/admin/sms/prospects/:clientId', async (req, res) => {
   try {
-    const rows = await prospects.listProspects(req.params.clientId, req.query.limit);
-    res.json({ prospects: rows });
+    const clientId = req.params.clientId;
+    const total = await prospects.countProspects(clientId);
+    const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit, 10) || 500));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const rows = await prospects.listProspectsPage(clientId, { limit, offset });
+    res.json({
+      prospects: rows,
+      total,
+      limit,
+      offset,
+      has_more: offset + rows.length < total,
+    });
   } catch (err) {
     console.error('[SMS Campaign] prospects list', err.message);
     res.status(500).json({ error: err.message });

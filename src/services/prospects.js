@@ -466,17 +466,62 @@ function _resetNormalizedNameColumnCache() {
   _normalizedNameColumnCache = null;
 }
 
-async function listProspects(clientId, limit = 500) {
+const PROSPECT_REST_PAGE = 1000; // PostgREST default max-rows per request
+
+/**
+ * One page of prospects (offset/limit) for dashboard preview. `limit` capped at 1000 per request.
+ */
+async function listProspectsPage(clientId, { limit = 500, offset = 0 } = {}) {
   const sb = requireSupabase();
-  const lim = Math.min(2000, Math.max(1, limit));
+  const lim = Math.min(PROSPECT_REST_PAGE, Math.max(1, parseInt(limit, 10) || 500));
+  const off = Math.max(0, parseInt(offset, 10) || 0);
   const { data, error } = await sb
     .from('sms_prospect')
     .select('*')
     .eq('client_id', clientId)
     .order('updated_at', { ascending: false })
-    .limit(lim);
+    .range(off, off + lim - 1);
   if (error) throw new Error(error.message);
   return (data || []).map(mapSbProspect);
+}
+
+/** All prospect rows up to `limit` (chunked past PostgREST max-rows). */
+async function listProspects(clientId, limit = 500) {
+  const sb = requireSupabase();
+  const lim = Math.min(500000, Math.max(1, parseInt(limit, 10) || 500));
+  const out = [];
+  let offset = 0;
+  while (out.length < lim) {
+    const take = Math.min(PROSPECT_REST_PAGE, lim - out.length);
+    const chunk = await listProspectsPage(clientId, { limit: take, offset });
+    out.push(...chunk);
+    if (chunk.length < take) break;
+    offset += take;
+  }
+  return out;
+}
+
+/** Phone numbers for every prospect in a campaign (chunked). */
+async function listProspectPhoneNumbers(clientId) {
+  const sb = requireSupabase();
+  const phones = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await sb
+      .from('sms_prospect')
+      .select('phone_e164')
+      .eq('client_id', clientId)
+      .order('updated_at', { ascending: false })
+      .range(offset, offset + PROSPECT_REST_PAGE - 1);
+    if (error) throw new Error(error.message);
+    const chunk = data || [];
+    for (const r of chunk) {
+      if (r.phone_e164) phones.push(r.phone_e164);
+    }
+    if (chunk.length < PROSPECT_REST_PAGE) break;
+    offset += PROSPECT_REST_PAGE;
+  }
+  return phones;
 }
 
 async function countProspects(clientId) {
@@ -501,6 +546,8 @@ module.exports = {
   appendDnc,
   upsertManyFromCsvRows,
   listProspects,
+  listProspectsPage,
+  listProspectPhoneNumbers,
   normalizePhoneDisplay,
   hasNormalizedNameColumn,
   _resetNormalizedNameColumnCache,
