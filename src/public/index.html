@@ -1141,7 +1141,7 @@
         <div>
           <div class="main-header-eyebrow">SMS outreach</div>
           <h2 id="campaigns">Campaigns</h2>
-          <p class="main-header-sub">Like outbound tools you already use: start with a name (draft), connect Slack, build your SMS sequence, add leads, then go live. Open a campaign to follow the same tabs inside.</p>
+          <p class="main-header-sub">Create a campaign, upload your lead file, write your text steps, adjust settings, then launch. Use <strong>Master inbox</strong> in the sidebar to see replies across all campaigns.</p>
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
           <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh</button>
@@ -1202,7 +1202,7 @@
       <div class="guide-section-body">
         <ol>
           <li><strong>New campaign</strong> &mdash; creates a draft; rename it on step 3 (Settings). Use <strong>Save draft</strong> if Slack is not ready yet.</li>
-          <li><strong>Steps 1–4</strong> in the panel: upload leads &amp; map, sequence, settings (Slack + SMS copy), preview &amp; send.</li>
+          <li><strong>Steps 1–4</strong> in the panel: leads (CSV), sequence (your texts), settings (Slack + timing), test &amp; log.</li>
           <li><strong>Master inbox</strong> in the sidebar shows recent SMS across all campaigns; click a row to open that campaign.</li>
         </ol>
         <div class="guide-note">Server needs <code>SUPABASE_URL</code> + service role, SMS provider keys, <code>SLACK_SIGNING_SECRET</code> for interactive Slack payloads.</div>
@@ -1390,6 +1390,16 @@ function renderGrid() {
   }).join('');
 }
 
+function onUploadAdvancedToggle(ev, clientId) {
+  const d = ev && ev.target;
+  if (!d || !d.open) return;
+  const id = smsCpPrimaryId(clientId);
+  if (!id) return;
+  smsCpEnsureStore(clientId).campaignId = id;
+  smsCpPopulateBranchTargets(clientId, id);
+  smsCpLoadTransitions(clientId);
+}
+
 // ─── Onboarding steps (campaign panel) ─────────────────
 function onboardingStep(clientId, step) {
   const steps = ['upload', 'sequence', 'settings', 'send'];
@@ -1441,53 +1451,54 @@ async function openDetail(id) {
 
         <div id="ob_upload_${c.id}" class="ob-panel active" role="tabpanel">
     <div class="detail-section">
-      <h4>Upload leads &amp; map columns</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Pick or create a sequence on <strong>step 2</strong> first if you plan to enroll. CSV writes to Supabase <code>sms_prospect</code>; extra columns become <code>{{snake_case}}</code> merge fields.</p>
-      <div class="sms-cockpit" style="margin-top:8px">
-          <h5 style="margin:0 0 6px;font-size:12px;color:var(--text-muted)">Staged CSV</h5>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
-            <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count staged</button>
-          </div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Reply branching</h5>
-          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">On inbound classification, move the phone to another sequence.</p>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px">
-            <div><label style="font-size:11px;color:var(--text-muted)">Target sequence</label>
-              <select id="sms_cp_branch_target_${c.id}" style="min-width:180px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></select></div>
-            <div><label style="font-size:11px;color:var(--text-muted)">When intent is</label>
-              <select id="sms_cp_branch_trigger_${c.id}" style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px">
+      <h4>Leads</h4>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Upload your CSV here. Each row becomes a contact in your list (stored in Supabase). Column headers like <code>business_name</code> or <code>normalized_name</code> turn into merge fields you can use in step 2 as <code>{{business_name}}</code>.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:20px">
+        <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
+        <button type="button" class="btn btn-primary btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count leads in list</button>
+      </div>
+      <p style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">When you are ready to send to everyone on the list, use <strong>Launch campaign</strong> in the footer (after you write your texts in step 2).</p>
+
+      <details class="sms-upload-advanced" style="margin-top:20px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface-2)" ontoggle="onUploadAdvancedToggle(event, '${c.id}')">
+        <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text)">Advanced — only if you need it</summary>
+        <div style="margin-top:14px;font-size:12px;color:var(--text-muted);line-height:1.65">
+          <p style="margin-bottom:12px"><strong>Reply routing</strong> — If someone texts you back, the system can label that reply (positive, question, etc.). Here you can optionally <em>move</em> that person into a different text sequence based on that label. Most campaigns skip this.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px">
+            <div><label style="font-size:11px;color:var(--text-muted)">Move them to which sequence</label>
+              <select id="sms_cp_branch_target_${c.id}" style="min-width:200px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12px"></select></div>
+            <div><label style="font-size:11px;color:var(--text-muted)">When the reply looks like</label>
+              <select id="sms_cp_branch_trigger_${c.id}" style="padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12px">
                 <option value="positive">positive</option>
                 <option value="negative">negative</option>
                 <option value="question">question</option>
                 <option value="unclassifiable">unclassifiable</option>
               </select></div>
-            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpAddBranch('${c.id}')">Add rule</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpAddBranch('${c.id}')">Save rule</button>
           </div>
-          <div id="sms_cp_transitions_${c.id}" style="font-size:11px;margin-bottom:12px"></div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Phones to enroll</h5>
-          <textarea class="sms-cp-csv" id="sms_cp_phones_${c.id}" placeholder="+15551234567&#10;+15559876543&#10;Or CSV: phone,business_name,city"></textarea>
+          <div id="sms_cp_transitions_${c.id}" style="font-size:11px;margin-bottom:16px"></div>
+
+          <p style="margin-bottom:8px"><strong>Paste numbers instead of CSV</strong> — One phone per line (optional). <strong>Preview how messages look</strong> fills in <code>{{fields}}</code> for those numbers. <strong>Send first text now</strong> only sends step 1 to this pasted list (your CSV list is separate). <strong>Upcoming sends</strong> shows texts waiting in the queue.</p>
+          <textarea class="sms-cp-csv" id="sms_cp_phones_${c.id}" placeholder="+15551234567&#10;+15559876543" style="min-height:100px"></textarea>
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpPreview('${c.id}')">Preview merge</button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpEnroll('${c.id}')">Enroll &amp; send step 1</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpPreview('${c.id}')">Preview how messages look</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpEnroll('${c.id}')">Send first text to pasted list only</button>
           </div>
-          <div id="sms_cp_preview_${c.id}" class="sms-cp-preview-out" style="display:none"></div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Send queue</h5>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpLoadJobs('${c.id}')">Refresh queue</button>
-          <div id="sms_cp_jobs_${c.id}" class="sms-cp-jobs"></div>
-      </div>
-    </div>
-    <div class="detail-section">
-      <h4>Supabase snapshot</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Recent rows from your Supabase project (<code>sms_prospect</code>, <code>campaign_event_log</code>).</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadProspects('${c.id}')">Refresh prospects</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Refresh events</button>
-      </div>
-      <h5 style="font-size:11px;color:var(--text-muted)">Prospects (recent)</h5>
-      <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
-      <h5 style="margin-top:12px;font-size:11px;color:var(--text-muted)">Campaign events (recent)</h5>
-      <div id="sms_sb_events_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
+          <div id="sms_cp_preview_${c.id}" class="sms-cp-preview-out" style="display:none;margin-top:10px"></div>
+          <h5 style="margin:16px 0 8px;font-size:12px;color:var(--text-muted)">Upcoming sends (pasted list)</h5>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpLoadJobs('${c.id}')">Refresh</button>
+          <div id="sms_cp_jobs_${c.id}" class="sms-cp-jobs" style="margin-top:8px"></div>
+
+          <h5 style="margin:20px 0 8px;font-size:12px;color:var(--text-muted)">Data check (Supabase)</h5>
+          <p style="margin-bottom:8px;font-size:11px">A read-only peek at what is stored for this campaign — useful for debugging.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadProspects('${c.id}')">Load contacts</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Load activity log</button>
+          </div>
+          <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="max-height:180px"></div>
+          <div id="sms_sb_events_${c.id}" class="sms-cp-jobs" style="max-height:160px;margin-top:10px"></div>
+        </div>
+      </details>
     </div>
         </div>
 
@@ -1517,8 +1528,8 @@ async function openDetail(id) {
                   <input type="text" id="sms_cp_sched_start_${c.id}" value="${esc(c.sequence?.schedule_start || '09:00')}" placeholder="09:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
                 <div><label style="font-size:11px;color:var(--text-muted)">Window end</label>
                   <input type="text" id="sms_cp_sched_end_${c.id}" value="${esc(c.sequence?.schedule_end || '17:00')}" placeholder="17:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
-                <div><label style="font-size:11px;color:var(--text-muted)">Min gap between sends (ms)</label>
-                  <input type="number" id="sms_cp_min_gap_${c.id}" min="0" step="1000" value="${c.sequence?.min_gap_between_sends_ms ?? 0}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <div><label style="font-size:11px;color:var(--text-muted)">Min seconds between sends</label>
+                  <input type="number" id="sms_cp_min_gap_${c.id}" min="0" step="1" value="${c.sequence?.min_gap_between_sends_ms != null ? Math.round(Number(c.sequence.min_gap_between_sends_ms) / 1000) : 0}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
                 <div><label style="font-size:11px;color:var(--text-muted)">Max sends / day (blank = none)</label>
                   <input type="number" id="sms_cp_max_send_day_${c.id}" min="1" placeholder="∞" value="${c.sequence?.max_sends_per_day ?? ''}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
                 <div><label style="font-size:11px;color:var(--text-muted)">Max new enrolls / day</label>
@@ -1548,13 +1559,13 @@ async function openDetail(id) {
           <input type="password" id="panel_f_slack_bot_${c.id}" value="${esc(c.slack_bot_token || '')}" placeholder="xoxb-…" autocomplete="off"></div>
         <div><label>Slack channel ID</label>
           <input type="text" id="panel_f_slack_ch_${c.id}" value="${esc(c.slack_channel_id || '')}" placeholder="C0123…"></div>
-        <div><label>Auto-reply SMS body (free site follow-up)</label>
+        <div><label>Optional follow-up text (after they reply)</label>
           <textarea id="panel_f_body_${c.id}" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;line-height:1.45">${esc(c.sms_free_site_body || '')}</textarea></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div><label>Delay before auto-reply (ms)</label>
-            <input type="number" id="panel_f_delay_${c.id}" min="0" step="1000" value="${c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000}"></div>
-          <div><label>Min gap between outbound texts (ms)</label>
-            <input type="number" id="panel_f_gap_${c.id}" min="0" step="1000" value="${c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 60000}"></div>
+          <div><label>Wait before that follow-up (seconds)</label>
+            <input type="number" id="panel_f_delay_${c.id}" min="0" step="1" value="${Math.round((c.sms_free_site_delay_ms != null ? Number(c.sms_free_site_delay_ms) : 20000) / 1000)}"></div>
+          <div><label>Min seconds between any two texts you send</label>
+            <input type="number" id="panel_f_gap_${c.id}" min="0" step="1" value="${Math.round((c.sms_min_gap_between_texts_ms != null ? Number(c.sms_min_gap_between_texts_ms) : 60000) / 1000)}"></div>
         </div>
       </div>
     </div>
@@ -1570,12 +1581,12 @@ async function openDetail(id) {
 
         <div id="ob_send_${c.id}" class="ob-panel" role="tabpanel">
     <div class="detail-section">
-      <h4>Preview &amp; send</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Merge tags from Supabase prospects, send a one-off test, and review this campaign’s SMS log.</p>
+      <h4>Test &amp; log</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.55"><strong>Test number</strong> — A real phone number you want to send one practice text to (include country code, e.g. +1…). It does not have to be on your list; it is only for testing.</p>
       <div class="sms-cockpit">
         <div class="sms-cockpit-grid">
           <div>
-            <label>Preview phone (E.164)</label>
+            <label>Test number (E.164)</label>
             <input type="text" id="sms_preview_phone_${c.id}" placeholder="+15551234567" autocomplete="tel">
           </div>
         </div>
@@ -1610,8 +1621,6 @@ async function openDetail(id) {
   smsCpRenderDow(c.id, c.sequence?.schedule_days || [1,2,3,4,5]);
   await loadVariableSuggestions(c.id);
   smsCpRenderSteps(c.id, (c.sequence && c.sequence.steps && c.sequence.steps.length) ? c.sequence.steps : [{ body_template: '(Draft — write your first SMS for {{business_name}})', delay_after_ms: 86400000 }]);
-  smsSupabaseLoadProspects(c.id);
-  smsSupabaseLoadEvents(c.id);
 }
 
 async function toggleActive() {
@@ -1657,8 +1666,8 @@ function readPanelCampaignPayload(clientId) {
     slack_bot_token: (document.getElementById(`panel_f_slack_bot_${clientId}`)?.value || '').trim(),
     slack_channel_id: (document.getElementById(`panel_f_slack_ch_${clientId}`)?.value || '').trim(),
     sms_free_site_body: (document.getElementById(`panel_f_body_${clientId}`)?.value || '').trim() || null,
-    sms_free_site_delay_ms: parseInt(document.getElementById(`panel_f_delay_${clientId}`)?.value, 10) || 20000,
-    sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById(`panel_f_gap_${clientId}`)?.value, 10) || 60000),
+    sms_free_site_delay_ms: Math.max(0, (parseInt(document.getElementById(`panel_f_delay_${clientId}`)?.value, 10) || 20) * 1000),
+    sms_min_gap_between_texts_ms: Math.max(0, (parseInt(document.getElementById(`panel_f_gap_${clientId}`)?.value, 10) || 60) * 1000),
   };
 }
 
@@ -1690,7 +1699,7 @@ async function saveCampaignFromPanel(draftOnly) {
       schedule_start: document.getElementById(`sms_cp_sched_start_${clientId}`)?.value?.trim() || '09:00',
       schedule_end: document.getElementById(`sms_cp_sched_end_${clientId}`)?.value?.trim() || '17:00',
       schedule_days: smsCpCollectDow(clientId),
-      min_gap_between_sends_ms: parseInt(document.getElementById(`sms_cp_min_gap_${clientId}`)?.value, 10) || 0,
+      min_gap_between_sends_ms: Math.max(0, (parseInt(document.getElementById(`sms_cp_min_gap_${clientId}`)?.value, 10) || 0) * 1000),
       max_sends_per_day: (() => { const v = document.getElementById(`sms_cp_max_send_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
       max_new_enrollments_per_day: (() => { const v = document.getElementById(`sms_cp_max_enroll_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
       exclude_other_campaigns: document.getElementById(`sms_cp_exclude_other_${clientId}`)?.checked !== false,
@@ -1921,7 +1930,7 @@ async function loadSmsPreview(clientId) {
     window._smsPreview[clientId] = j;
     const vars = JSON.stringify(j.variables || {}, null, 2);
     out.innerHTML =
-      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Delay setting: <strong>' + (j.delay_ms != null ? j.delay_ms + ' ms' : '—') + '</strong> · Prospect in Supabase: <strong>' + (j.matched ? 'yes' : 'no') + '</strong></div>' +
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Wait before follow-up: <strong>' + (j.delay_ms != null ? (Math.round(j.delay_ms / 1000) + ' s') : '—') + '</strong> · On your list: <strong>' + (j.matched ? 'yes' : 'no') + '</strong></div>' +
       '<div style="font-size:11px;color:var(--text-muted)">Variables</div><pre style="font-size:11px;margin:4px 0 10px;white-space:pre-wrap">' + esc(vars) + '</pre>' +
       '<div style="font-size:11px;color:var(--text-muted)">Template</div><div style="opacity:0.9;margin-bottom:8px;white-space:pre-wrap">' + esc(j.template || '') + '</div>' +
       '<div style="font-size:11px;color:var(--text-muted)">Rendered (what would send)</div><div id="sms_rendered_' + clientId + '" style="font-weight:600;margin-top:4px;white-space:pre-wrap">' + esc(j.rendered || '') + '</div>';
@@ -2016,7 +2025,10 @@ async function smsCpLoadCampaign(clientId, campaignId) {
     const se = document.getElementById(`sms_cp_sched_end_${clientId}`);
     if (se) se.value = c.schedule_end || '17:00';
     const mg = document.getElementById(`sms_cp_min_gap_${clientId}`);
-    if (mg) mg.value = c.min_gap_between_sends_ms != null ? c.min_gap_between_sends_ms : 0;
+    if (mg) {
+      const ms = c.min_gap_between_sends_ms != null ? Number(c.min_gap_between_sends_ms) : 0;
+      mg.value = Math.round(ms / 1000);
+    }
     const msd = document.getElementById(`sms_cp_max_send_day_${clientId}`);
     if (msd) msd.value = c.max_sends_per_day != null ? c.max_sends_per_day : '';
     const med = document.getElementById(`sms_cp_max_enroll_day_${clientId}`);
@@ -2126,7 +2138,7 @@ async function smsCpStagedCount(clientId) {
     const res = await fetch(`${API}/admin/sms/staged-leads/${clientId}?limit=5000`);
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Failed');
-    toast(`${(j.leads || []).length} prospect row(s) in Supabase`, 'success');
+    toast(`${(j.leads || []).length} lead row(s) in Supabase`, 'success');
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -2183,13 +2195,13 @@ function smsCpRenderSteps(clientId, steps) {
   wrap.innerHTML = steps.map((s, i) => {
     const ord = i + 1;
     const body = esc(s.body_template || s.body || '');
-    const del = s.delay_after_ms != null ? Number(s.delay_after_ms) : 86400000;
+    const delSec = s.delay_after_ms != null ? Math.round(Number(s.delay_after_ms) / 1000) : 86400;
     return `<div class="sms-step-block" data-step-index="${i}">
       <h5>Step ${ord}${ord < steps.length ? ' · wait after this step before next' : ' · final step'}</h5>
       <textarea class="sms_cp_step_body" placeholder="Message body with {{variables}}">${body}</textarea>
       <div class="delay-row">
-        <div><label style="font-size:11px;color:var(--text-muted)">Delay after this step (ms)</label>
-        <input type="number" class="sms_cp_step_delay" min="0" step="1000" value="${del}"></div>
+        <div><label style="font-size:11px;color:var(--text-muted)">Wait before next step (seconds)</label>
+        <input type="number" class="sms_cp_step_delay" min="0" step="1" value="${delSec}"></div>
         <div style="display:flex;align-items:flex-end"><button type="button" class="btn btn-danger btn-sm" onclick="smsCpRemoveStep('${clientId}',${i})">Remove step</button></div>
       </div>
     </div>`;
@@ -2211,7 +2223,7 @@ function smsCpAddStep(clientId) {
     const delay = block.querySelector('.sms_cp_step_delay');
     steps.push({
       body_template: body ? body.value : '',
-      delay_after_ms: delay ? parseInt(delay.value, 10) || 0 : 0,
+      delay_after_ms: delay ? Math.max(0, (parseInt(delay.value, 10) || 0) * 1000) : 0,
     });
   });
   steps.push({ body_template: 'Follow-up: {{business_name}}', delay_after_ms: 86400000 });
@@ -2228,7 +2240,7 @@ function smsCpRemoveStep(clientId, index) {
     const delay = block.querySelector('.sms_cp_step_delay');
     steps.push({
       body_template: body ? body.value : '',
-      delay_after_ms: delay ? parseInt(delay.value, 10) || 0 : 0,
+      delay_after_ms: delay ? Math.max(0, (parseInt(delay.value, 10) || 0) * 1000) : 0,
     });
   });
   if (!steps.length) steps.push({ body_template: '', delay_after_ms: 86400000 });
@@ -2244,7 +2256,7 @@ function smsCpCollectSteps(clientId) {
     const delay = block.querySelector('.sms_cp_step_delay');
     steps.push({
       body_template: body ? body.value.trim() : '',
-      delay_after_ms: delay ? Math.max(0, parseInt(delay.value, 10) || 0) : 0,
+      delay_after_ms: delay ? Math.max(0, (parseInt(delay.value, 10) || 0) * 1000) : 0,
     });
   });
   return steps;
@@ -2297,7 +2309,7 @@ function smsCpMetaPayload(clientId, opts = {}) {
     schedule_start: document.getElementById(`sms_cp_sched_start_${clientId}`)?.value?.trim() || '09:00',
     schedule_end: document.getElementById(`sms_cp_sched_end_${clientId}`)?.value?.trim() || '17:00',
     schedule_days: smsCpCollectDow(clientId),
-    min_gap_between_sends_ms: parseInt(document.getElementById(`sms_cp_min_gap_${clientId}`)?.value, 10) || 0,
+    min_gap_between_sends_ms: Math.max(0, (parseInt(document.getElementById(`sms_cp_min_gap_${clientId}`)?.value, 10) || 0) * 1000),
     max_sends_per_day: (() => { const v = document.getElementById(`sms_cp_max_send_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
     max_new_enrollments_per_day: (() => { const v = document.getElementById(`sms_cp_max_enroll_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
     exclude_other_campaigns: document.getElementById(`sms_cp_exclude_other_${clientId}`)?.checked !== false,
