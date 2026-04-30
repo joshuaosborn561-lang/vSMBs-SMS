@@ -492,8 +492,10 @@ async function importStagedLeads(clientId, rows, sourceLabel) {
   const enriched = sourceLabel
     ? rows.map((r) => ({ ...r, upload_source: sourceLabel }))
     : rows;
+  const csv_rows = enriched.length;
   const imported = await prospects.upsertManyFromCsvRows(clientId, enriched);
-  return { imported };
+  const total_contacts = await prospects.countProspects(clientId).catch(() => null);
+  return { imported, csv_rows, total_contacts };
 }
 
 async function listStagedLeads(clientId, limit = 500) {

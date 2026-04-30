@@ -2216,7 +2216,18 @@ async function smsCpUploadCsv(clientId) {
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Upload failed');
-    toast(`Imported ${j.imported} prospects (Supabase)`, 'success');
+    const tc = j.total_contacts != null ? j.total_contacts : '';
+    const cr = j.csv_rows != null ? j.csv_rows : '';
+    if (cr && tc !== '' && Number(cr) !== Number(tc)) {
+      toast(`CSV: ${cr} row(s) with phone · ${tc} unique contact(s) in Supabase (same number = one row).`, 'success');
+    } else {
+      toast(
+        tc !== ''
+          ? `Imported ${j.imported} row(s) · ${tc} contact(s) in this campaign`
+          : `Imported ${j.imported} row(s) (Supabase)`,
+        'success'
+      );
+    }
     smsLeadsPreviewLoad(clientId, true);
     await loadVariableSuggestions(clientId);
     input.value = '';
@@ -2238,6 +2249,8 @@ async function smsCpStagedCount(clientId) {
 }
 
 const _LEADS_PREVIEW_PAGE = 1000;
+/** Stop auto-loading preview rows past this (browser table size). Use "Load next page" if we hit cap. */
+const _LEADS_PREVIEW_MAX_AUTO = 50000;
 const _leadsPreviewState = {};
 
 function smsLeadsPreviewExtraKeys(row) {
@@ -2293,6 +2306,13 @@ function smsLeadsPreviewRenderTable(columns, rows) {
   return '<table class="leads-preview-table"><thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table>';
 }
 
+async function smsLeadsPreviewFetchPage(clientId, offset) {
+  const res = await fetch(`${API}/admin/sms/prospects/${clientId}?limit=${_LEADS_PREVIEW_PAGE}&offset=${offset}`);
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error || 'Failed');
+  return j;
+}
+
 async function smsLeadsPreviewLoad(clientId, reset) {
   const wrap = document.getElementById(`sms_leads_preview_${clientId}`);
   const metaEl = document.getElementById(`leads_preview_meta_${clientId}`);
@@ -2305,7 +2325,6 @@ async function smsLeadsPreviewLoad(clientId, reset) {
     _leadsPreviewState[clientId] = st;
   }
 
-  const fetchOffset = reset ? 0 : st.rows.length;
   if (reset) {
     st.rows = [];
     st.total = null;
@@ -2316,27 +2335,75 @@ async function smsLeadsPreviewLoad(clientId, reset) {
   }
 
   try {
-    const res = await fetch(`${API}/admin/sms/prospects/${clientId}?limit=${_LEADS_PREVIEW_PAGE}&offset=${fetchOffset}`);
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error || 'Failed');
-    const batch = j.prospects || [];
-    if (typeof j.total === 'number') st.total = j.total;
-    st.rows = st.rows.concat(batch);
-    st.columns = smsLeadsPreviewBuildColumns(st.rows);
-    wrap.innerHTML = smsLeadsPreviewRenderTable(st.columns, st.rows);
-
-    const shown = st.rows.length;
-    const total = st.total;
-    if (metaEl) {
-      if (total != null) {
-        metaEl.textContent = `Showing ${shown} of ${total} lead(s). Scroll horizontally for all columns.`;
-      } else {
-        metaEl.textContent = `Showing ${shown} lead(s). Scroll horizontally for all columns.`;
+    if (reset) {
+      let offset = 0;
+      for (;;) {
+        if (st.rows.length >= _LEADS_PREVIEW_MAX_AUTO) {
+          if (metaEl) {
+            metaEl.textContent = `Showing first ${_LEADS_PREVIEW_MAX_AUTO.toLocaleString()} of ${st.total != null ? st.total : '?'} lead(s) (browser cap). Use “Load next page” to load more.`;
+          }
+          if (moreBtn) moreBtn.style.display = 'inline-block';
+          break;
+        }
+        const j = await smsLeadsPreviewFetchPage(clientId, offset);
+        const batch = j.prospects || [];
+        if (typeof j.total === 'number') st.total = j.total;
+        st.rows = st.rows.concat(batch);
+        st.columns = smsLeadsPreviewBuildColumns(st.rows);
+        wrap.innerHTML = smsLeadsPreviewRenderTable(st.columns, st.rows);
+        const shown = st.rows.length;
+        const total = st.total;
+        if (metaEl) {
+          if (total != null) {
+            metaEl.textContent = shown < total
+              ? `Loading… ${shown.toLocaleString()} of ${total.toLocaleString()}`
+              : `Showing ${shown.toLocaleString()} of ${total.toLocaleString()} lead(s). Scroll horizontally for all columns.`;
+          } else {
+            metaEl.textContent = batch.length === _LEADS_PREVIEW_PAGE
+              ? `Loading… ${shown.toLocaleString()}`
+              : `Showing ${shown.toLocaleString()} lead(s). Scroll horizontally for all columns.`;
+          }
+        }
+        const hasMore =
+          j.has_more === true ||
+          (total != null && shown < total) ||
+          batch.length === _LEADS_PREVIEW_PAGE;
+        if (!hasMore || batch.length === 0) {
+          if (metaEl && total != null && shown >= total) {
+            metaEl.textContent = `Showing ${shown.toLocaleString()} of ${total.toLocaleString()} lead(s). Scroll horizontally for all columns.`;
+          } else if (metaEl && total == null) {
+            metaEl.textContent = `Showing ${shown.toLocaleString()} lead(s). Scroll horizontally for all columns.`;
+          }
+          if (moreBtn) moreBtn.style.display = 'none';
+          break;
+        }
+        offset += batch.length;
       }
-    }
-    if (moreBtn) {
-      const hasMore = j.has_more === true || (total != null && shown < total) || batch.length === _LEADS_PREVIEW_PAGE;
-      moreBtn.style.display = hasMore ? 'inline-block' : 'none';
+    } else {
+      const fetchOffset = st.rows.length;
+      const j = await smsLeadsPreviewFetchPage(clientId, fetchOffset);
+      const batch = j.prospects || [];
+      if (typeof j.total === 'number') st.total = j.total;
+      st.rows = st.rows.concat(batch);
+      st.columns = smsLeadsPreviewBuildColumns(st.rows);
+      wrap.innerHTML = smsLeadsPreviewRenderTable(st.columns, st.rows);
+
+      const shown = st.rows.length;
+      const total = st.total;
+      if (metaEl) {
+        if (total != null) {
+          metaEl.textContent = `Showing ${shown.toLocaleString()} of ${total.toLocaleString()} lead(s). Scroll horizontally for all columns.`;
+        } else {
+          metaEl.textContent = `Showing ${shown.toLocaleString()} lead(s). Scroll horizontally for all columns.`;
+        }
+      }
+      if (moreBtn) {
+        const hasMore =
+          j.has_more === true ||
+          (total != null && shown < total) ||
+          batch.length === _LEADS_PREVIEW_PAGE;
+        moreBtn.style.display = hasMore ? 'inline-block' : 'none';
+      }
     }
   } catch (e) {
     wrap.innerHTML = '<p style="padding:14px;color:var(--red);margin:0">' + esc(e.message) + '</p>';
