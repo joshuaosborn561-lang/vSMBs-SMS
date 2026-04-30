@@ -11,8 +11,177 @@ function requireSupabase() {
   return sb;
 }
 
+/**
+ * Canonical E.164 for storage + unique (client_id, phone_e164).
+ * NANP: 10-digit national or 11-digit starting with 1 → +1XXXXXXXXXX so
+ * "5551234567", "15551234567", and "+15551234567" dedupe in Supabase.
+ * Other regions: if the value is all digits and length ≥ 8, prefix "+".
+ */
+function canonicalPhoneForProspect(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('+')) return trimmed;
+  const d = sheets.digitsOnly(trimmed);
+  if (!d) return trimmed;
+  if (d.length === 10) return `+1${d}`;
+  if (d.length === 11 && d.startsWith('1')) return `+${d}`;
+  if (d.length >= 8 && d.length <= 15 && /^\d+$/.test(trimmed.replace(/\s/g, ''))) {
+    return `+${d}`;
+  }
+  return trimmed;
+}
+
+/** DB `phone_e164` values that should match the same NANP canonical (+1…). */
+function phoneColumnQueryVariants(canonical) {
+  const c = String(canonical || '').trim();
+  if (!c) return [];
+  const d = sheets.digitsOnly(c);
+  const variants = new Set([c]);
+  if (d.length === 11 && d.startsWith('1')) {
+    variants.add(d);
+    variants.add(d.slice(1));
+  } else if (d.length === 10) {
+    variants.add(d);
+    variants.add(`1${d}`);
+    variants.add(`+1${d}`);
+  }
+  return [...variants];
+}
+
+function mergeScalarPreferIncoming(incoming, existingVal, fallback) {
+  if (incoming !== undefined) return incoming;
+  if (existingVal !== undefined && existingVal !== null && existingVal !== '') return existingVal;
+  return fallback ?? null;
+}
+
+function mergeExtraObjects(...objects) {
+  const out = {};
+  for (const o of objects) {
+    if (!o || typeof o !== 'object') continue;
+    for (const [k, v] of Object.entries(o)) {
+      if (v != null && v !== '') out[k] = v;
+    }
+  }
+  return out;
+}
+
+/** Merge several sms_prospect rows (same logical NANP phone) into one payload. */
+function aggregateProspectRowsForUpsert(rows, fields) {
+  const sorted = [...rows].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+  const base = sorted[0] || {};
+  const extraIn = fields.extra && typeof fields.extra === 'object' ? fields.extra : {};
+  const mergedExtra = mergeExtraObjects(...sorted.map((r) => r.extra), extraIn);
+
+  const pickBool = (key) => {
+    if (fields[key] !== undefined) return !!fields[key];
+    if (sorted.some((r) => r && r[key])) return true;
+    return !!base[key];
+  };
+
+  return {
+    business_name: mergeScalarPreferIncoming(
+      fields.business_name,
+      sorted.map((r) => r.business_name).find((v) => v != null && v !== ''),
+      base.business_name
+    ),
+    normalized_name: mergeScalarPreferIncoming(
+      fields.normalized_name,
+      sorted.map((r) => r.normalized_name).find((v) => v != null && v !== ''),
+      base.normalized_name
+    ),
+    vertical: mergeScalarPreferIncoming(
+      fields.vertical,
+      sorted.map((r) => r.vertical).find((v) => v != null && v !== ''),
+      base.vertical
+    ),
+    city: mergeScalarPreferIncoming(
+      fields.city,
+      sorted.map((r) => r.city).find((v) => v != null && v !== ''),
+      base.city
+    ),
+    sent_status: mergeScalarPreferIncoming(
+      fields.sent_status,
+      sorted.map((r) => r.sent_status).find((v) => v != null && v !== ''),
+      base.sent_status
+    ),
+    reply: mergeScalarPreferIncoming(
+      fields.reply,
+      sorted.map((r) => r.reply).find((v) => v != null && v !== ''),
+      base.reply
+    ),
+    intent: mergeScalarPreferIncoming(
+      fields.intent,
+      sorted.map((r) => r.intent).find((v) => v != null && v !== ''),
+      base.intent
+    ),
+    site_url: mergeScalarPreferIncoming(
+      fields.site_url,
+      sorted.map((r) => r.site_url).find((v) => v != null && v !== ''),
+      base.site_url
+    ),
+    customer_status: mergeScalarPreferIncoming(
+      fields.customer_status,
+      sorted.map((r) => r.customer_status).find((v) => v != null && v !== ''),
+      base.customer_status
+    ),
+    is_dnc: pickBool('is_dnc'),
+    extra: mergedExtra,
+  };
+}
+
+async function fetchProspectsByPhoneVariants(sb, clientId, canonical) {
+  const variants = phoneColumnQueryVariants(canonical);
+  if (!variants.length) return [];
+  const { data, error } = await sb
+    .from('sms_prospect')
+    .select('*')
+    .eq('client_id', clientId)
+    .in('phone_e164', variants);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+/**
+ * When legacy data has two rows (e.g. +1555… and 555…), merge into one canonical row.
+ * Keeps the row that already uses `canonical` if present, else the oldest `id`.
+ */
+async function consolidateProspectPhoneDuplicates(sb, clientId, canonical, existingRows) {
+  const rows = existingRows || (await fetchProspectsByPhoneVariants(sb, clientId, canonical));
+  if (rows.length <= 1) return rows[0] || null;
+
+  const byCanon = rows.find((r) => r.phone_e164 === canonical);
+  const survivor = byCanon || [...rows].sort((a, b) => String(a.id).localeCompare(String(b.id)))[0];
+  const merged = aggregateProspectRowsForUpsert(rows, {});
+
+  for (const r of rows) {
+    if (r.id !== survivor.id) {
+      const { error: delErr } = await sb.from('sms_prospect').delete().eq('id', r.id);
+      if (delErr) throw new Error(delErr.message);
+    }
+  }
+
+  const payload = {
+    ...merged,
+    phone_e164: canonical,
+    client_id: clientId,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await sb
+    .from('sms_prospect')
+    .update(payload)
+    .eq('id', survivor.id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** @deprecated Prefer canonicalPhoneForProspect; kept for callers expecting a “display” normalizer. */
 function normalizePhoneDisplay(raw) {
-  return String(raw || '').trim();
+  return canonicalPhoneForProspect(raw);
 }
 
 function mapSbProspect(r) {
@@ -77,6 +246,20 @@ async function findProspectByPhone(clientId, rawPhone) {
   const keys = sheets.phoneMatchKeys(rawPhone);
   if (!keys.length) return { row: null };
 
+  const sb = getSupabase();
+  const canonical = canonicalPhoneForProspect(rawPhone);
+  if (sb && canonical) {
+    try {
+      const variantRows = (await fetchProspectsByPhoneVariants(sb, clientId, canonical)).map(mapSbProspect);
+      for (const r of variantRows) {
+        const rk = sheets.phoneMatchKeys(r.phone_e164);
+        if (keys.some((k) => rk.includes(k))) return { row: r };
+      }
+    } catch (e) {
+      /* fall back to full table scan */
+    }
+  }
+
   const rows = await fetchClientProspects(clientId);
   for (const r of rows) {
     const rk = sheets.phoneMatchKeys(r.phone_e164);
@@ -108,27 +291,31 @@ async function loadDncPhoneKeys(clientId) {
 
 async function upsertProspect(clientId, fields) {
   const sb = requireSupabase();
-  const phone = normalizePhoneDisplay(fields.phone_e164 || fields.phone);
-  if (!phone) throw new Error('phone required');
+  const canonical = canonicalPhoneForProspect(fields.phone_e164 || fields.phone);
+  if (!canonical) throw new Error('phone required');
+
+  let variantRows = await fetchProspectsByPhoneVariants(sb, clientId, canonical);
+  if (variantRows.length > 1) {
+    await consolidateProspectPhoneDuplicates(sb, clientId, canonical, variantRows);
+    variantRows = await fetchProspectsByPhoneVariants(sb, clientId, canonical);
+  }
+
+  if (variantRows.length === 1 && variantRows[0].phone_e164 !== canonical) {
+    const { error: renErr } = await sb
+      .from('sms_prospect')
+      .update({ phone_e164: canonical, updated_at: new Date().toISOString() })
+      .eq('id', variantRows[0].id);
+    if (renErr) throw new Error(renErr.message);
+    variantRows = [{ ...variantRows[0], phone_e164: canonical }];
+  }
 
   const extraIn = fields.extra && typeof fields.extra === 'object' ? fields.extra : {};
-  const { row: existingRow } = await findProspectByPhone(clientId, phone);
-  const mergedExtra = { ...(existingRow?.extra || {}), ...extraIn };
-
+  const mergedScalars = aggregateProspectRowsForUpsert(variantRows, fields);
   const row = {
     client_id: clientId,
-    phone_e164: phone,
-    business_name: fields.business_name !== undefined ? fields.business_name : existingRow?.business_name ?? null,
-    normalized_name: fields.normalized_name !== undefined ? fields.normalized_name : existingRow?.normalized_name ?? null,
-    vertical: fields.vertical !== undefined ? fields.vertical : existingRow?.vertical ?? null,
-    city: fields.city !== undefined ? fields.city : existingRow?.city ?? null,
-    sent_status: fields.sent_status !== undefined ? fields.sent_status : existingRow?.sent_status ?? null,
-    reply: fields.reply !== undefined ? fields.reply : existingRow?.reply ?? null,
-    intent: fields.intent !== undefined ? fields.intent : existingRow?.intent ?? null,
-    site_url: fields.site_url !== undefined ? fields.site_url : existingRow?.site_url ?? null,
-    customer_status: fields.customer_status !== undefined ? fields.customer_status : existingRow?.customer_status ?? null,
-    is_dnc: fields.is_dnc !== undefined ? !!fields.is_dnc : !!existingRow?.is_dnc,
-    extra: mergedExtra,
+    phone_e164: canonical,
+    ...mergedScalars,
+    extra: mergeExtraObjects(...variantRows.map((r) => r.extra), extraIn),
     updated_at: new Date().toISOString(),
   };
 
@@ -142,7 +329,7 @@ async function upsertProspect(clientId, fields) {
 }
 
 async function patchOrCreateProspect(clientId, rawPhone, patch) {
-  const phone = normalizePhoneDisplay(rawPhone);
+  const phone = canonicalPhoneForProspect(rawPhone);
   if (!phone) return null;
   const scalar = {};
   const scalars = ['business_name', 'normalized_name', 'vertical', 'city', 'sent_status', 'reply', 'intent', 'site_url', 'customer_status'];
@@ -189,14 +376,14 @@ async function patchProspectFields(clientId, rawPhone, patch) {
 }
 
 async function appendDnc(clientId, rawPhone, reason) {
-  const phone = normalizePhoneDisplay(rawPhone);
-  const keys = sheets.phoneMatchKeys(phone);
-  let targetPhone = phone;
+  const keys = sheets.phoneMatchKeys(rawPhone);
+  const canonical = canonicalPhoneForProspect(rawPhone);
+  let targetPhone = canonical || String(rawPhone || '').trim();
   const rows = await fetchClientProspects(clientId);
   for (const r of rows) {
     const rk = sheets.phoneMatchKeys(r.phone_e164);
     if (keys.some((k) => rk.includes(k))) {
-      targetPhone = r.phone_e164;
+      targetPhone = canonicalPhoneForProspect(r.phone_e164) || r.phone_e164;
       break;
     }
   }

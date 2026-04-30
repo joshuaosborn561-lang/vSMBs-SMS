@@ -21,6 +21,8 @@ create table if not exists sms_prospect (
   extra jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  -- One row per campaign (client_id) per stored phone string; the app canonicalizes
+  -- NANP numbers to +1… on write and merges legacy duplicate string forms.
   unique (client_id, phone_e164)
 );
 
