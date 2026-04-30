@@ -1618,6 +1618,20 @@ async function openDetail(id) {
           <div><label>Min seconds between any two texts you send</label>
             <input type="number" id="panel_f_gap_${c.id}" min="0" step="1" value="${Math.round((c.sms_min_gap_between_texts_ms != null ? Number(c.sms_min_gap_between_texts_ms) : 60000) / 1000)}"></div>
         </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--border)">
+          <label>SMS gateway — SIM slot (this campaign)</label>
+          <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;line-height:1.5">SMSMobileAPI sends on the device’s default SIM unless you set a slot. Use <strong>SIM 1</strong> or <strong>SIM 2</strong> to match the physical card you want (see <a href="https://smsmobileapi.com/doc" target="_blank" rel="noopener">API docs</a> — parameter <code>port</code>).</p>
+          <select id="panel_f_sim_${c.id}" style="width:100%;max-width:320px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:13px">
+            <option value="" ${c.sms_gateway_port != 1 && c.sms_gateway_port != 2 ? 'selected' : ''}>Auto — first available SIM</option>
+            <option value="1" ${Number(c.sms_gateway_port) === 1 ? 'selected' : ''}>SIM slot 1</option>
+            <option value="2" ${Number(c.sms_gateway_port) === 2 ? 'selected' : ''}>SIM slot 2</option>
+          </select>
+        </div>
+        <div style="margin-top:12px">
+          <label>Optional — gateway device ID (<code>sIdentifiant</code>)</label>
+          <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;line-height:1.5">Only if you have <strong>more than one phone</strong> linked to the same API key. Leave blank to use the first available device. Find the id in the SMSMobileAPI dashboard / gateway mobile list.</p>
+          <input type="text" id="panel_f_sid_${c.id}" value="${esc(c.sms_gateway_device_sid || '')}" placeholder="e.g. e5b70a8a28b2ec3d" autocomplete="off" style="width:100%;max-width:480px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-family:ui-monospace,monospace;font-size:12px">
+        </div>
       </div>
     </div>
     <div class="detail-section">
@@ -1712,6 +1726,10 @@ async function openCreateCampaign() {
 
 function readPanelCampaignPayload(clientId) {
   const nameEl = document.getElementById(`panel_f_name_${clientId}`);
+  const simSel = document.getElementById(`panel_f_sim_${clientId}`);
+  const simRaw = simSel && simSel.value !== '' ? parseInt(simSel.value, 10) : null;
+  const sidEl = document.getElementById(`panel_f_sid_${clientId}`);
+  const sidTrim = (sidEl && sidEl.value.trim()) || '';
   return {
     name: (nameEl && nameEl.value.trim()) || '',
     slack_bot_token: (document.getElementById(`panel_f_slack_bot_${clientId}`)?.value || '').trim(),
@@ -1719,6 +1737,8 @@ function readPanelCampaignPayload(clientId) {
     sms_free_site_body: (document.getElementById(`panel_f_body_${clientId}`)?.value || '').trim() || null,
     sms_free_site_delay_ms: Math.max(0, (parseInt(document.getElementById(`panel_f_delay_${clientId}`)?.value, 10) || 20) * 1000),
     sms_min_gap_between_texts_ms: Math.max(0, (parseInt(document.getElementById(`panel_f_gap_${clientId}`)?.value, 10) || 60) * 1000),
+    sms_gateway_port: simRaw === 1 || simRaw === 2 ? simRaw : null,
+    sms_gateway_device_sid: sidTrim || null,
   };
 }
 

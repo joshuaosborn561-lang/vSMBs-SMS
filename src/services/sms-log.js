@@ -1,6 +1,20 @@
 const db = require('../db');
 const { sendSms } = require('./sms-gateway');
 
+async function getSmsGatewayOptionsForClient(clientId) {
+  const { rows: [row] } = await db.query(
+    `SELECT sms_gateway_port, sms_gateway_device_sid FROM clients WHERE id = $1`,
+    [clientId]
+  );
+  if (!row) return {};
+  const port = row.sms_gateway_port != null ? Number(row.sms_gateway_port) : null;
+  const sid = row.sms_gateway_device_sid != null ? String(row.sms_gateway_device_sid).trim() : '';
+  return {
+    port: port === 1 || port === 2 ? port : undefined,
+    sIdentifiant: sid || undefined,
+  };
+}
+
 /** Serialized sends per client + last successful SMS time for carrier-safe spacing */
 const clientOutboundTail = new Map();
 const lastClientOutboundSentAt = new Map();
@@ -141,7 +155,8 @@ async function sendSmsLogged({ clientId, leadPhone, body, templateKey, variables
   return queueClientOutbound(clientId, async () => {
     try {
       await waitCarrierGapIfNeeded(clientId);
-      const r = await sendSms({ to: leadPhone, body });
+      const gw = await getSmsGatewayOptionsForClient(clientId);
+      const r = await sendSms({ to: leadPhone, body, ...gw });
       lastClientOutboundSentAt.set(clientId, Date.now());
       await logOutboundSent({
         clientId,
@@ -186,6 +201,7 @@ async function listLogMaster(limit = 80) {
 }
 
 module.exports = {
+  getSmsGatewayOptionsForClient,
   logInbound,
   updateInboundMeta,
   logOutboundScheduled,

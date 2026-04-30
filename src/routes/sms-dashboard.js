@@ -90,7 +90,8 @@ router.post('/admin/sms/test-send/:clientId', async (req, res) => {
     if (!client) return res.status(404).json({ error: 'Client not found' });
 
     const { sendSms } = require('../services/sms-gateway');
-    const result = await sendSms({ to: phone, body });
+    const gw = await smsLog.getSmsGatewayOptionsForClient(clientId);
+    const result = await sendSms({ to: phone, body, ...gw });
     await smsLog.logOutboundSent({
       clientId,
       leadPhone: phone,

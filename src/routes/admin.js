@@ -101,6 +101,7 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
       'gmail_watcher_started_at',
       'sms_free_site_body', 'sms_free_site_delay_ms',
       'sms_min_gap_between_texts_ms',
+      'sms_gateway_port', 'sms_gateway_device_sid',
     ];
 
     const updates = [];
@@ -115,6 +116,16 @@ router.patch('/admin/clients/:clientId', async (req, res) => {
       }
       if (key === 'sms_min_gap_between_texts_ms') {
         v = Math.max(0, Number(v) || 0);
+      }
+      if (key === 'sms_gateway_port') {
+        if (v === '' || v == null) v = null;
+        else {
+          const p = Number(v);
+          v = p === 1 || p === 2 ? p : null;
+        }
+      }
+      if (key === 'sms_gateway_device_sid') {
+        v = String(v || '').trim() || null;
       }
       updates.push(`${key} = $${idx}`);
       values.push(v);

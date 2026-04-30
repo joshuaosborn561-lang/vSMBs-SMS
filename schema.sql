@@ -24,6 +24,8 @@ CREATE TABLE clients (
   sms_free_site_body TEXT,
   sms_free_site_delay_ms INTEGER NOT NULL DEFAULT 20000,
   sms_min_gap_between_texts_ms INTEGER NOT NULL DEFAULT 60000,
+  sms_gateway_port SMALLINT,
+  sms_gateway_device_sid TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
