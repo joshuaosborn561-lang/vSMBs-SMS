@@ -419,7 +419,7 @@
     }
 
     .panel {
-      width: min(560px, 100vw);
+      width: min(960px, 100vw);
       max-width: 100%;
       min-height: 100%;
       background: var(--surface);
@@ -978,66 +978,6 @@
       display: block;
     }
 
-    /* Campaign builder wizard */
-    .wizard-rail {
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border);
-    }
-    .wizard-steps {
-      flex: 1;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .wizard-step {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-muted);
-      background: var(--surface-2);
-      border: 1px solid transparent;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .wizard-step:hover { border-color: var(--border); color: var(--text); }
-    .wizard-step.active {
-      background: rgba(45, 106, 63, 0.12);
-      color: var(--accent);
-      border-color: rgba(45, 106, 63, 0.35);
-    }
-    .wizard-step-num {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: var(--surface);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 700;
-    }
-    .wizard-step.active .wizard-step-num {
-      background: var(--accent);
-      color: #fff;
-    }
-    .wizard-panel { display: none; animation: fadeIn 0.2s ease; }
-    .wizard-panel.active { display: block; }
-    .wizard-nav {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 20px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
-    }
     .badge-draft {
       display: inline-flex;
       align-items: center;
@@ -1073,6 +1013,85 @@
       justify-content: space-between;
       gap: 12px;
     }
+
+    /* Campaign panel: onboarding + master inbox */
+    .panel-shell {
+      display: flex;
+      gap: 0;
+      align-items: stretch;
+      min-height: min(70vh, 640px);
+      margin: 0 -24px;
+      padding: 0;
+    }
+    .panel-onboarding {
+      flex: 1;
+      min-width: 0;
+      overflow-y: auto;
+      padding: 0 24px 16px;
+    }
+    .panel-inbox {
+      width: 300px;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      background: var(--surface-2);
+      display: flex;
+      flex-direction: column;
+      max-height: min(75vh, 720px);
+    }
+    .panel-inbox-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .panel-inbox-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px 16px;
+      font-size: 12px;
+    }
+    .inbox-row {
+      padding: 10px 10px;
+      margin-bottom: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .inbox-row:hover { border-color: var(--accent-light); }
+    .inbox-row .dir { font-weight: 700; font-size: 10px; text-transform: uppercase; }
+    .inbox-row .dir.in { color: var(--accent-light); }
+    .inbox-row .dir.out { color: var(--yellow); }
+    .inbox-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+    .onboarding-rail {
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .onboarding-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .ob-step {
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--surface-2);
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .ob-step:hover { border-color: var(--border); color: var(--text); }
+    .ob-step.active {
+      background: rgba(45, 106, 63, 0.12);
+      color: var(--accent);
+      border-color: rgba(45, 106, 63, 0.35);
+    }
+    .ob-panel { display: none; }
+    .ob-panel.active { display: block; animation: fadeIn 0.2s ease; }
   </style>
 </head>
 <body>
@@ -1092,7 +1111,7 @@
     </div>
     <nav class="sidebar-nav" aria-label="Sections">
       <a href="#campaigns" class="active" onclick="return false">Campaigns</a>
-      <a href="#guide" onclick="toggleGuide(); return false;">How it works</a>
+      <a href="#guide" id="guideToggleBtn" onclick="toggleGuide(); return false;">How it works</a>
     </nav>
     <p class="sidebar-footer">Prospects &amp; campaign events are stored in Supabase when configured on the server.</p>
   </aside>
@@ -1106,7 +1125,7 @@
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
         <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh</button>
-        <button class="btn btn-primary" onclick="openCreateModal()">New campaign</button>
+        <button class="btn btn-primary" onclick="openCreateCampaign()">New campaign</button>
       </div>
     </header>
 
@@ -1118,87 +1137,6 @@
       </div>
 
       <div class="campaign-grid" id="campaignGrid"></div>
-    </div>
-  </div>
-</div>
-
-<!-- Create / Edit Modal (wizard: similar flow to SmartLead — create → connect → content → review) -->
-<div class="modal-overlay" id="formModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="formTitle">New campaign</h3>
-      <div class="modal-header-actions">
-        <button class="modal-guide-btn" id="guideToggleBtn" onclick="toggleGuide()" title="How it works">&#9432; Help</button>
-        <button class="modal-close" onclick="closeModal('formModal')">&times;</button>
-      </div>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="editClientId">
-      <input type="hidden" id="formWizardStep" value="0">
-
-      <div class="wizard-rail" id="formWizardRail">
-        <div class="wizard-steps" role="tablist" aria-label="Campaign setup steps">
-          <button type="button" class="wizard-step active" data-wizard="0" onclick="setFormWizardStep(0)"><span class="wizard-step-num">1</span> Name</button>
-          <button type="button" class="wizard-step" data-wizard="1" onclick="setFormWizardStep(1)"><span class="wizard-step-num">2</span> Slack</button>
-          <button type="button" class="wizard-step" data-wizard="2" onclick="setFormWizardStep(2)"><span class="wizard-step-num">3</span> Auto-reply</button>
-          <button type="button" class="wizard-step" data-wizard="3" onclick="setFormWizardStep(3)"><span class="wizard-step-num">4</span> Timing</button>
-        </div>
-      </div>
-
-      <div id="wizard_panel_0" class="wizard-panel active">
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 1 — Create the campaign shell (can stay <strong>draft</strong> until Slack is filled in). You will add sequence steps and leads after saving.</p>
-        <div class="form-group">
-          <label>Campaign name *</label>
-          <input type="text" id="f_name" placeholder="e.g. Q1 plumbers — no website">
-        </div>
-      </div>
-
-      <div id="wizard_panel_1" class="wizard-panel">
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 2 — Connect Slack for alerts and actions (optional until you are ready to go live).</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Slack bot token</label>
-            <input type="text" id="f_slack_bot_token" placeholder="xoxb-...">
-          </div>
-          <div class="form-group">
-            <label>Slack channel ID</label>
-            <input type="text" id="f_slack_channel_id" placeholder="C0123456789">
-          </div>
-        </div>
-        <div class="guide-note" style="margin-top:4px">Leave blank to save as draft. Required before routing real Slack notifications.</div>
-      </div>
-
-      <div id="wizard_panel_2" class="wizard-panel">
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 3 — Message sent after the classifier marks an inbound reply as <strong>positive</strong> (inbound automation).</p>
-        <div class="form-group">
-          <label>Positive-reply SMS template</label>
-          <textarea id="f_sms_free_site_body" placeholder="Hi {{business_name}} — ..."></textarea>
-          <div class="hint"><code>{{variable}}</code> matches Supabase prospect columns / <code>extra</code> (snake_case).</div>
-        </div>
-      </div>
-
-      <div id="wizard_panel_3" class="wizard-panel">
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.55">Step 4 — Global pacing for this campaign workspace (sequences can add their own gaps).</p>
-        <div class="form-group">
-          <label>Delay before positive-reply SMS (ms)</label>
-          <input type="number" id="f_sms_free_site_delay_ms" placeholder="20000" min="0" step="1000" value="20000">
-        </div>
-        <div class="form-group">
-          <label>Minimum gap between any outbound SMS (ms)</label>
-          <input type="number" id="f_sms_min_gap_between_texts_ms" placeholder="60000" min="0" step="500" value="60000">
-          <div class="hint">Default 60000 ms = 60 seconds for carrier safety.</div>
-        </div>
-      </div>
-
-      <div class="wizard-nav">
-        <button type="button" class="btn btn-ghost" id="wizardBackBtn" onclick="wizardStepDelta(-1)">Back</button>
-        <button type="button" class="btn btn-ghost" id="wizardNextBtn" onclick="wizardStepDelta(1)">Next</button>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('formModal')">Cancel</button>
-      <button class="btn btn-ghost" id="saveDraftBtn" onclick="submitForm(true)">Save draft</button>
-      <button class="btn btn-primary" id="formSubmitBtn" onclick="submitForm(false)">Save campaign</button>
     </div>
   </div>
 </div>
@@ -1219,11 +1157,9 @@
       <summary>Campaign flow (draft → live)</summary>
       <div class="guide-section-body">
         <ol>
-          <li><strong>New campaign</strong> &mdash; wizard step 1: name only. Use <strong>Save draft</strong> if Slack is not ready yet.</li>
-          <li><strong>Slack</strong> &mdash; step 2: bot token + channel ID (needed for notifications / approve flows).</li>
-          <li>Open the campaign &rarr; <strong>Sequence</strong> tab &mdash; define SMS steps and schedule (like adding emails + schedule elsewhere).</li>
-          <li><strong>Leads &amp; data</strong> &mdash; CSV / paste phones, preview merge tags, enroll.</li>
-          <li><strong>Overview</strong> &mdash; SMS log, test send; <strong>Webhooks</strong> has inbound SMS URL.</li>
+          <li><strong>New campaign</strong> &mdash; creates a draft; rename it on step 3 (Settings). Use <strong>Save draft</strong> if Slack is not ready yet.</li>
+          <li><strong>Steps 1–4</strong> in the panel: upload leads &amp; map, sequence, settings (Slack + SMS copy), preview &amp; send.</li>
+          <li><strong>Master inbox</strong> on the right shows recent SMS across all campaigns; click a row to open that campaign.</li>
         </ol>
         <div class="guide-note">Server needs <code>SUPABASE_URL</code> + service role, SMS provider keys, <code>SLACK_SIGNING_SECRET</code> for interactive Slack payloads.</div>
       </div>
@@ -1279,10 +1215,11 @@
     </div>
     <div class="modal-body" id="detailBody"></div>
     <div class="modal-footer">
-      <button class="btn btn-danger btn-sm" onclick="deleteCampaignFromDetail()">Delete campaign</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCampaignFromDetail()">Delete</button>
       <button class="btn btn-danger btn-sm" id="toggleActiveBtn" onclick="toggleActive()">Pause</button>
       <button class="btn btn-ghost" onclick="closeModal('detailModal')">Close</button>
-      <button class="btn btn-primary" onclick="openEditFromDetail()">Edit settings</button>
+      <button class="btn btn-ghost" onclick="saveCampaignFromPanel(true)">Save draft</button>
+      <button class="btn btn-primary" onclick="saveCampaignFromPanel(false)">Save campaign</button>
     </div>
   </div>
 </div>
@@ -1294,26 +1231,6 @@ let currentDetailClient = null;
 
 function isCampaignDraft(c) {
   return !(c.slack_bot_token && String(c.slack_bot_token).trim() && c.slack_channel_id && String(c.slack_channel_id).trim());
-}
-
-function setFormWizardStep(n) {
-  const step = Math.max(0, Math.min(3, n));
-  document.getElementById('formWizardStep').value = String(step);
-  for (let i = 0; i <= 3; i++) {
-    const p = document.getElementById('wizard_panel_' + i);
-    if (p) p.classList.toggle('active', i === step);
-    const btn = document.querySelector('.wizard-step[data-wizard="' + i + '"]');
-    if (btn) btn.classList.toggle('active', i === step);
-  }
-  const back = document.getElementById('wizardBackBtn');
-  const next = document.getElementById('wizardNextBtn');
-  if (back) back.style.visibility = step === 0 ? 'hidden' : 'visible';
-  if (next) next.style.display = step >= 3 ? 'none' : 'inline-flex';
-}
-
-function wizardStepDelta(delta) {
-  const cur = parseInt(document.getElementById('formWizardStep').value, 10) || 0;
-  setFormWizardStep(cur + delta);
 }
 
 // ─── Load ────────────────────────────────────────────
@@ -1360,7 +1277,7 @@ function renderGrid() {
       <div class="empty-state">
         <div class="icon">&#128172;</div>
         <p>No campaigns yet. Create one to build a sequence, upload leads, and send.</p>
-        <button class="btn btn-primary" onclick="openCreateModal()">New campaign</button>
+        <button class="btn btn-primary" onclick="openCreateCampaign()">New campaign</button>
       </div>
     `;
     return;
@@ -1395,21 +1312,19 @@ function renderGrid() {
   }).join('');
 }
 
-// ─── Detail tabs ───────────────────────────────────────
-function detailTab(clientId, tab) {
-  const tabs = ['overview', 'sequence', 'leads', 'integrations'];
-  tabs.forEach((t) => {
-    const panel = document.getElementById(`detail_tab_${t}_${clientId}`);
-    if (panel) panel.classList.toggle('active', t === tab);
+// ─── Onboarding steps (campaign panel) ─────────────────
+function onboardingStep(clientId, step) {
+  const steps = ['upload', 'sequence', 'settings', 'send'];
+  steps.forEach((s) => {
+    const p = document.getElementById(`ob_${s}_${clientId}`);
+    if (p) p.classList.toggle('active', s === step);
+    const b = document.querySelector(`.ob-step[data-ob="${s}"][data-client="${clientId}"]`);
+    if (b) b.classList.toggle('active', s === step);
   });
-  const nav = document.getElementById(`detail_tab_nav_${clientId}`);
-  if (nav) {
-    nav.querySelectorAll('.campaign-tab').forEach((btn) => {
-      const on = btn.getAttribute('data-tab') === tab;
-      btn.classList.toggle('active', on);
-      btn.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-  }
+  try {
+    sessionStorage.setItem(`ob_step_${clientId}`, step);
+  } catch (e) {}
+  if (step === 'send') loadSmsLog(clientId);
 }
 
 // ─── Detail ──────────────────────────────────────────
@@ -1427,40 +1342,70 @@ function openDetail(id) {
   document.getElementById('toggleActiveBtn').textContent = c.active ? 'Pause campaign' : 'Resume campaign';
 
   document.getElementById('detailBody').innerHTML = `
-    <div class="panel-detail-head">
-      <div class="campaign-tabs">
-        <div class="campaign-tabs-nav" id="detail_tab_nav_${c.id}" role="tablist" aria-label="Campaign sections">
-          <button type="button" role="tab" class="campaign-tab active" aria-selected="true" data-tab="overview" onclick="detailTab('${c.id}', 'overview')">Overview</button>
-          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="sequence" onclick="detailTab('${c.id}', 'sequence')">Sequence</button>
-          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="leads" onclick="detailTab('${c.id}', 'leads')">Leads &amp; data</button>
-          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="integrations" onclick="detailTab('${c.id}', 'integrations')">Webhooks &amp; Slack</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="detail_tab_overview_${c.id}" class="campaign-tab-panel active" role="tabpanel">
-    <div class="detail-section">
-      <h4>Preview &amp; activity</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Merge tags from Supabase prospects, test-send, and review inbound/outbound lines. Needs server env: Supabase + SMS provider.</p>
-      <div class="sms-cockpit">
-        <div class="sms-cockpit-grid">
-          <div>
-            <label>Preview phone (E.164)</label>
-            <input type="text" id="sms_preview_phone_${c.id}" placeholder="+15551234567" autocomplete="tel">
+    <div class="panel-shell">
+      <div class="panel-onboarding">
+        <div class="onboarding-rail">
+          <div class="onboarding-steps" role="tablist" aria-label="Campaign setup steps">
+            <button type="button" role="tab" class="ob-step active" data-ob="upload" data-client="${c.id}" onclick="onboardingStep('${c.id}', 'upload')">1 · Upload &amp; map</button>
+            <button type="button" role="tab" class="ob-step" data-ob="sequence" data-client="${c.id}" onclick="onboardingStep('${c.id}', 'sequence')">2 · Sequence</button>
+            <button type="button" role="tab" class="ob-step" data-ob="settings" data-client="${c.id}" onclick="onboardingStep('${c.id}', 'settings')">3 · Settings</button>
+            <button type="button" role="tab" class="ob-step" data-ob="send" data-client="${c.id}" onclick="onboardingStep('${c.id}', 'send')">4 · Preview &amp; send</button>
           </div>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview</button>
-        <div id="sms_preview_out_${c.id}" class="sms-preview-box" style="display:none"></div>
-        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')">Send test SMS</button>
-        </div>
-        <h4 style="margin-top:16px;font-size:11px;color:var(--text-muted)">SMS log</h4>
-        <div id="sms_log_wrap_${c.id}" class="sms-log-wrap"><div style="opacity:0.5;font-size:12px">Loading…</div></div>
+
+        <div id="ob_upload_${c.id}" class="ob-panel active" role="tabpanel">
+    <div class="detail-section">
+      <h4>Upload leads &amp; map columns</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Pick or create a sequence on <strong>step 2</strong> first if you plan to enroll. CSV writes to Supabase <code>sms_prospect</code>; extra columns become <code>{{snake_case}}</code> merge fields.</p>
+      <div class="sms-cockpit" style="margin-top:8px">
+          <h5 style="margin:0 0 6px;font-size:12px;color:var(--text-muted)">Staged CSV</h5>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
+            <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count staged</button>
+          </div>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Reply branching</h5>
+          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">On inbound classification, move the phone to another sequence.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px">
+            <div><label style="font-size:11px;color:var(--text-muted)">Target sequence</label>
+              <select id="sms_cp_branch_target_${c.id}" style="min-width:180px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></select></div>
+            <div><label style="font-size:11px;color:var(--text-muted)">When intent is</label>
+              <select id="sms_cp_branch_trigger_${c.id}" style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px">
+                <option value="positive">positive</option>
+                <option value="negative">negative</option>
+                <option value="question">question</option>
+                <option value="unclassifiable">unclassifiable</option>
+              </select></div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpAddBranch('${c.id}')">Add rule</button>
+          </div>
+          <div id="sms_cp_transitions_${c.id}" style="font-size:11px;margin-bottom:12px"></div>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Phones to enroll</h5>
+          <textarea class="sms-cp-csv" id="sms_cp_phones_${c.id}" placeholder="+15551234567&#10;+15559876543&#10;Or CSV: phone,business_name,city"></textarea>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpPreview('${c.id}')">Preview merge</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpEnroll('${c.id}')">Enroll &amp; send step 1</button>
+          </div>
+          <div id="sms_cp_preview_${c.id}" class="sms-cp-preview-out" style="display:none"></div>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Send queue</h5>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpLoadJobs('${c.id}')">Refresh queue</button>
+          <div id="sms_cp_jobs_${c.id}" class="sms-cp-jobs"></div>
       </div>
     </div>
+    <div class="detail-section">
+      <h4>Supabase snapshot</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Recent rows from your Supabase project (<code>sms_prospect</code>, <code>campaign_event_log</code>).</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadProspects('${c.id}')">Refresh prospects</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Refresh events</button>
+      </div>
+      <h5 style="font-size:11px;color:var(--text-muted)">Prospects (recent)</h5>
+      <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
+      <h5 style="margin-top:12px;font-size:11px;color:var(--text-muted)">Campaign events (recent)</h5>
+      <div id="sms_sb_events_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
     </div>
+        </div>
 
-    <div id="detail_tab_sequence_${c.id}" class="campaign-tab-panel" role="tabpanel">
+        <div id="ob_sequence_${c.id}" class="ob-panel" role="tabpanel">
     <div class="detail-section">
       <h4>Outbound sequence</h4>
       <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.55">
@@ -1519,61 +1464,29 @@ function openDetail(id) {
         <div id="sms_cp_empty_${c.id}" style="opacity:0.7;font-size:12px">Select or create a sequence.</div>
       </div>
     </div>
-    </div>
+        </div>
 
-    <div id="detail_tab_leads_${c.id}" class="campaign-tab-panel" role="tabpanel">
+        <div id="ob_settings_${c.id}" class="ob-panel" role="tabpanel">
     <div class="detail-section">
-      <h4>Lists, enroll &amp; queue</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Select an SMS sequence on the <strong>Sequence</strong> tab first. CSV writes to Supabase <code>sms_prospect</code>; extra columns become <code>{{snake_case}}</code> merge fields.</p>
-      <div class="sms-cockpit" style="margin-top:8px">
-          <h5 style="margin:0 0 6px;font-size:12px;color:var(--text-muted)">Staged CSV</h5>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
-            <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count staged</button>
-          </div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Reply branching</h5>
-          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">On inbound classification, move the phone to another sequence.</p>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px">
-            <div><label style="font-size:11px;color:var(--text-muted)">Target sequence</label>
-              <select id="sms_cp_branch_target_${c.id}" style="min-width:180px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></select></div>
-            <div><label style="font-size:11px;color:var(--text-muted)">When intent is</label>
-              <select id="sms_cp_branch_trigger_${c.id}" style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px">
-                <option value="positive">positive</option>
-                <option value="negative">negative</option>
-                <option value="question">question</option>
-                <option value="unclassifiable">unclassifiable</option>
-              </select></div>
-            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpAddBranch('${c.id}')">Add rule</button>
-          </div>
-          <div id="sms_cp_transitions_${c.id}" style="font-size:11px;margin-bottom:12px"></div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Phones to enroll</h5>
-          <textarea class="sms-cp-csv" id="sms_cp_phones_${c.id}" placeholder="+15551234567&#10;+15559876543&#10;Or CSV: phone,business_name,city"></textarea>
-          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpPreview('${c.id}')">Preview merge</button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpEnroll('${c.id}')">Enroll &amp; send step 1</button>
-          </div>
-          <div id="sms_cp_preview_${c.id}" class="sms-cp-preview-out" style="display:none"></div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Send queue</h5>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpLoadJobs('${c.id}')">Refresh queue</button>
-          <div id="sms_cp_jobs_${c.id}" class="sms-cp-jobs"></div>
+      <h4>Campaign settings</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.55">Workspace name, Slack connection, default SMS copy, and carrier-safe pacing. Use <strong>Save draft</strong> in the footer if Slack is not ready yet.</p>
+      <div style="display:grid;gap:12px;max-width:560px">
+        <div><label>Campaign name</label>
+          <input type="text" id="panel_f_name_${c.id}" value="${esc(c.name || '')}" autocomplete="organization"></div>
+        <div><label>Slack bot token</label>
+          <input type="password" id="panel_f_slack_bot_${c.id}" value="${esc(c.slack_bot_token || '')}" placeholder="xoxb-…" autocomplete="off"></div>
+        <div><label>Slack channel ID</label>
+          <input type="text" id="panel_f_slack_ch_${c.id}" value="${esc(c.slack_channel_id || '')}" placeholder="C0123…"></div>
+        <div><label>Auto-reply SMS body (free site follow-up)</label>
+          <textarea id="panel_f_body_${c.id}" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;line-height:1.45">${esc(c.sms_free_site_body || '')}</textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label>Delay before auto-reply (ms)</label>
+            <input type="number" id="panel_f_delay_${c.id}" min="0" step="1000" value="${c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000}"></div>
+          <div><label>Min gap between outbound texts (ms)</label>
+            <input type="number" id="panel_f_gap_${c.id}" min="0" step="1000" value="${c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 60000}"></div>
+        </div>
       </div>
     </div>
-    <div class="detail-section">
-      <h4>Supabase snapshot</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Recent rows from your Supabase project (<code>sms_prospect</code>, <code>campaign_event_log</code>).</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadProspects('${c.id}')">Refresh prospects</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Refresh events</button>
-      </div>
-      <h5 style="font-size:11px;color:var(--text-muted)">Prospects (recent)</h5>
-      <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
-      <h5 style="margin-top:12px;font-size:11px;color:var(--text-muted)">Campaign events (recent)</h5>
-      <div id="sms_sb_events_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
-    </div>
-    </div>
-
-    <div id="detail_tab_integrations_${c.id}" class="campaign-tab-panel" role="tabpanel">
     <div class="detail-section">
       <h4>Inbound SMS webhook</h4>
       <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Configure your SMS provider to POST inbound messages to this URL.</p>
@@ -1582,23 +1495,51 @@ function openDetail(id) {
         <button class="copy-btn" onclick="copyText('${esc(c.sms_webhook_url || '')}', this)" title="Copy">&#128203;</button>
       </div>
     </div>
+        </div>
+
+        <div id="ob_send_${c.id}" class="ob-panel" role="tabpanel">
     <div class="detail-section">
-      <h4>Slack (read-only)</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Notifications and manual actions use this workspace. Edit via <strong>Edit settings</strong>.</p>
-      <div class="detail-row">
-        <span class="label">Bot token</span>
-        <span class="value masked" onclick="toggleMask(this, '${esc(c.slack_bot_token || '')}')">${mask(c.slack_bot_token)}</span>
-      </div>
-      <div class="detail-row">
-        <span class="label">Channel ID</span>
-        <span class="value">${esc(c.slack_channel_id)}</span>
+      <h4>Preview &amp; send</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Merge tags from Supabase prospects, send a one-off test, and review this campaign’s SMS log.</p>
+      <div class="sms-cockpit">
+        <div class="sms-cockpit-grid">
+          <div>
+            <label>Preview phone (E.164)</label>
+            <input type="text" id="sms_preview_phone_${c.id}" placeholder="+15551234567" autocomplete="tel">
+          </div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview</button>
+        <div id="sms_preview_out_${c.id}" class="sms-preview-box" style="display:none"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')">Send test SMS</button>
+        </div>
+        <h4 style="margin-top:16px;font-size:11px;color:var(--text-muted)">This campaign — SMS log</h4>
+        <div id="sms_log_wrap_${c.id}" class="sms-log-wrap"><div style="opacity:0.5;font-size:12px">Loading…</div></div>
       </div>
     </div>
+        </div>
+
+      </div>
+
+      <aside class="panel-inbox" aria-label="Master inbox">
+        <div class="panel-inbox-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span>Master inbox</span>
+          <button type="button" class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:11px" onclick="loadMasterInbox()">Refresh</button>
+        </div>
+        <div class="panel-inbox-body" id="master_inbox_body"><div style="opacity:0.5;font-size:12px">Loading…</div></div>
+      </aside>
     </div>
   `;
 
   openModal('detailModal');
+  let savedStep = 'upload';
+  try {
+    savedStep = sessionStorage.getItem(`ob_step_${c.id}`) || 'upload';
+  } catch (e) {}
+  if (!['upload', 'sequence', 'settings', 'send'].includes(savedStep)) savedStep = 'upload';
+  onboardingStep(c.id, savedStep);
   loadSmsLog(c.id);
+  loadMasterInbox();
   smsCpReloadList(c.id);
   smsSupabaseLoadProspects(c.id);
   smsSupabaseLoadEvents(c.id);
@@ -1621,83 +1562,109 @@ async function toggleActive() {
   }
 }
 
-// ─── Create / Edit ───────────────────────────────────
-function openCreateModal() {
-  document.getElementById('formTitle').textContent = 'New campaign';
-  document.getElementById('formSubmitBtn').textContent = 'Save campaign';
-  document.getElementById('saveDraftBtn').style.display = 'inline-flex';
-  document.getElementById('editClientId').value = '';
-  clearForm();
-  setFormWizardStep(0);
-  openModal('formModal');
+async function openCreateCampaign() {
+  try {
+    const res = await fetch(`${API}/admin/clients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'New campaign' }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'Could not create campaign');
+    await loadClients();
+    openDetail(j.id);
+    toast('Draft created — use the steps to upload leads, sequence, and settings.', 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
-function openEditFromDetail() {
+function readPanelCampaignPayload(clientId) {
+  const nameEl = document.getElementById(`panel_f_name_${clientId}`);
+  return {
+    name: (nameEl && nameEl.value.trim()) || '',
+    slack_bot_token: (document.getElementById(`panel_f_slack_bot_${clientId}`)?.value || '').trim(),
+    slack_channel_id: (document.getElementById(`panel_f_slack_ch_${clientId}`)?.value || '').trim(),
+    sms_free_site_body: (document.getElementById(`panel_f_body_${clientId}`)?.value || '').trim() || null,
+    sms_free_site_delay_ms: parseInt(document.getElementById(`panel_f_delay_${clientId}`)?.value, 10) || 20000,
+    sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById(`panel_f_gap_${clientId}`)?.value, 10) || 60000),
+  };
+}
+
+async function saveCampaignFromPanel(draftOnly) {
   const c = currentDetailClient;
   if (!c) return;
-  closeModal('detailModal');
-
-  document.getElementById('formTitle').textContent = 'Edit campaign';
-  document.getElementById('formSubmitBtn').textContent = 'Save campaign';
-  document.getElementById('saveDraftBtn').style.display = 'inline-flex';
-  document.getElementById('editClientId').value = c.id;
-  document.getElementById('f_name').value = c.name || '';
-  document.getElementById('f_slack_bot_token').value = c.slack_bot_token || '';
-  document.getElementById('f_slack_channel_id').value = c.slack_channel_id || '';
-  document.getElementById('f_sms_free_site_body').value = c.sms_free_site_body || '';
-  document.getElementById('f_sms_free_site_delay_ms').value = (c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000);
-  document.getElementById('f_sms_min_gap_between_texts_ms').value = (c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 60000);
-
-  setFormWizardStep(0);
-  openModal('formModal');
-}
-
-async function submitForm(draftOnly) {
-  const id = document.getElementById('editClientId').value;
-  const data = {
-    name: document.getElementById('f_name').value.trim(),
-    slack_bot_token: document.getElementById('f_slack_bot_token').value.trim(),
-    slack_channel_id: document.getElementById('f_slack_channel_id').value.trim(),
-    sms_free_site_body: document.getElementById('f_sms_free_site_body').value.trim() || null,
-    sms_free_site_delay_ms: parseInt(document.getElementById('f_sms_free_site_delay_ms').value, 10) || 20000,
-    sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById('f_sms_min_gap_between_texts_ms').value, 10) || 60000),
-  };
+  const clientId = c.id;
+  const data = readPanelCampaignPayload(clientId);
 
   if (!data.name) {
     toast('Campaign name is required', 'error');
+    onboardingStep(clientId, 'settings');
     return;
   }
 
   if (!draftOnly && (!data.slack_bot_token || !data.slack_channel_id)) {
-    toast('Add Slack on step 2, or click Save draft to keep an incomplete campaign', 'error');
-    setFormWizardStep(1);
+    toast('Add Slack bot token and channel ID (step 3), or click Save draft.', 'error');
+    onboardingStep(clientId, 'settings');
     return;
   }
 
   try {
-    const isEdit = !!id;
-    const url = isEdit ? `${API}/admin/clients/${id}` : `${API}/admin/clients`;
-    const method = isEdit ? 'PATCH' : 'POST';
-
-    const res = await fetch(url, {
-      method,
+    const res = await fetch(`${API}/admin/clients/${clientId}`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    const updated = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(updated.error || 'Save failed');
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Request failed');
+    currentDetailClient = updated;
+    clients = clients.map((x) => (x.id === updated.id ? updated : x));
+    document.getElementById('detailTitle').textContent = updated.name;
+    const subEl = document.getElementById('detailSubtitle');
+    if (subEl) {
+      const draft = isCampaignDraft(updated);
+      subEl.textContent = (draft ? 'Draft · ' : (updated.active ? 'Running · ' : 'Paused · ')) + 'ID ' + updated.id;
     }
 
-    const okMsg = draftOnly
-      ? (isEdit ? 'Draft saved' : 'Draft created')
-      : (isEdit ? 'Campaign saved' : 'Campaign created');
-    toast(okMsg, 'success');
-    closeModal('formModal');
-    loadClients();
+    toast(draftOnly ? 'Draft saved' : 'Campaign saved', 'success');
+    renderStats();
+    renderGrid();
   } catch (err) {
     toast(err.message, 'error');
+  }
+}
+
+async function loadMasterInbox() {
+  const wrap = document.getElementById('master_inbox_body');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="opacity:0.5;font-size:12px">Loading…</div>';
+  try {
+    const res = await fetch(`${API}/admin/sms/log?limit=80`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    const rows = j.items || [];
+    if (!rows.length) {
+      wrap.innerHTML = '<div style="opacity:0.5;font-size:12px">No messages yet.</div>';
+      return;
+    }
+    wrap.innerHTML = rows.map((r) => {
+      const t = new Date(r.sent_at || r.created_at).toLocaleString();
+      const dir = r.direction === 'inbound' ? 'in' : 'out';
+      const dcls = r.direction === 'inbound' ? 'in' : 'out';
+      const camp = esc(r.campaign_name || '');
+      const phone = esc(r.lead_phone || '');
+      const preview = esc(String(r.body || '').slice(0, 120));
+      const cid = esc(r.client_id || '');
+      return `<div class="inbox-row" role="button" tabindex="0" onclick="openDetail('${cid}')" onkeydown="if(event.key==='Enter')openDetail('${cid}')">
+        <div><span class="dir ${dcls}">${dir}</span> · <strong>${camp}</strong></div>
+        <div style="margin-top:4px;font-weight:600">${phone}</div>
+        <div style="margin-top:4px;opacity:0.92;line-height:1.35">${preview}${String(r.body || '').length > 120 ? '…' : ''}</div>
+        <div class="inbox-meta">${t}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = '<div style="color:var(--red);font-size:12px">' + esc(e.message) + '</div>';
   }
 }
 
@@ -1725,17 +1692,11 @@ async function deleteCampaignFromDetail() {
 function toggleGuide() {
   const drawer = document.getElementById('guideDrawer');
   const isOpen = drawer.classList.toggle('active');
-  document.getElementById('guideToggleBtn').classList.toggle('active', isOpen);
-  document.getElementById('detailGuideToggleBtn').classList.toggle('active', isOpen);
+  const guideBtn = document.getElementById('guideToggleBtn');
+  if (guideBtn) guideBtn.classList.toggle('active', isOpen);
+  const detailGuideBtn = document.getElementById('detailGuideToggleBtn');
+  if (detailGuideBtn) detailGuideBtn.classList.toggle('active', isOpen);
   document.body.classList.toggle('guide-open', isOpen);
-}
-
-function clearForm() {
-  ['f_name', 'f_slack_bot_token', 'f_slack_channel_id', 'f_sms_free_site_body'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('f_sms_free_site_delay_ms').value = '20000';
-  document.getElementById('f_sms_min_gap_between_texts_ms').value = '60000';
 }
 
 function formatDelayMs(ms) {
@@ -2306,8 +2267,7 @@ function openModal(id) {
 
 function closeModal(id) {
   document.getElementById(id).classList.remove('active');
-  // Close guide drawer when either modal closes
-  if (id === 'formModal' || id === 'detailModal') {
+  if (id === 'detailModal') {
     const drawer = document.getElementById('guideDrawer');
     if (drawer.classList.contains('active')) {
       closeGuide();
@@ -2317,8 +2277,10 @@ function closeModal(id) {
 
 function closeGuide() {
   document.getElementById('guideDrawer').classList.remove('active');
-  document.getElementById('guideToggleBtn').classList.remove('active');
-  document.getElementById('detailGuideToggleBtn').classList.remove('active');
+  const guideBtn = document.getElementById('guideToggleBtn');
+  if (guideBtn) guideBtn.classList.remove('active');
+  const detailGuideBtn = document.getElementById('detailGuideToggleBtn');
+  if (detailGuideBtn) detailGuideBtn.classList.remove('active');
   document.body.classList.remove('guide-open');
 }
 
