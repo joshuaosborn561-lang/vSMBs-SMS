@@ -10,7 +10,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    /* SalesGlider palette — distinct shell from reply-handler */
+    /* SalesGlider palette — SMS campaign console */
     :root {
       --bg: #fafcfb;
       --surface: #ffffff;
@@ -310,13 +310,13 @@
 
     .btn-sm { padding: 5px 10px; font-size: 12px; }
 
-    /* ─── Client Cards ────────────────────── */
-    .client-grid {
+    /* ─── Campaign cards (list) ───────────── */
+    .campaign-grid {
       display: grid;
       gap: 16px;
     }
 
-    .client-card {
+    .campaign-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -326,20 +326,20 @@
       box-shadow: var(--shadow-sm);
     }
 
-    .client-card:hover {
+    .campaign-card:hover {
       border-color: rgba(45, 106, 63, 0.45);
       box-shadow: 0 8px 28px rgba(15, 31, 20, 0.07);
       transform: translateY(-1px);
     }
 
-    .client-card-header {
+    .campaign-card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-bottom: 16px;
     }
 
-    .client-name {
+    .campaign-card-title {
       font-size: 16px;
       font-weight: 600;
     }
@@ -366,7 +366,7 @@
       color: var(--red);
     }
 
-    .client-meta {
+    .campaign-card-meta {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
@@ -374,8 +374,8 @@
       color: var(--text-muted);
     }
 
-    .client-meta .key-present { color: var(--green); }
-    .client-meta .key-missing { color: var(--text-muted); opacity: 0.5; }
+    .campaign-card-meta .key-present { color: var(--green); }
+    .campaign-card-meta .key-missing { color: var(--text-muted); opacity: 0.5; }
 
     /* ─── Modals & detail panel ───────────── */
     .modal-overlay,
@@ -977,28 +977,6 @@
     .campaign-tab-panel.active {
       display: block;
     }
-    .optional-form-block {
-      margin-top: 8px;
-      border: 1px dashed var(--border);
-      border-radius: var(--radius);
-      padding: 0 14px;
-      background: var(--bg);
-    }
-    .optional-form-block summary {
-      cursor: pointer;
-      padding: 12px 0;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-muted);
-      list-style: none;
-    }
-    .optional-form-block summary::-webkit-details-marker { display: none; }
-    .optional-form-block[open] summary {
-      color: var(--text);
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 12px;
-    }
-    .optional-form-block .form-group:last-child { margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -1043,7 +1021,7 @@
         <h2>All campaigns</h2>
       </div>
 
-      <div class="client-grid" id="clientGrid"></div>
+      <div class="campaign-grid" id="campaignGrid"></div>
     </div>
   </div>
 </div>
@@ -1066,21 +1044,6 @@
         <input type="text" id="f_name" placeholder="e.g. Cold outreach — Dallas plumbers">
       </div>
 
-      <details class="optional-form-block" id="optionalIntegrations">
-        <summary>Email &amp; LinkedIn integrations (optional)</summary>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Only if this workspace receives SmartLead or HeyReach webhooks for AI replies in Slack. Pure SMS campaigns can skip this.</p>
-      <div class="form-row">
-        <div class="form-group">
-          <label>SmartLead API key</label>
-          <input type="text" id="f_smartlead_api_key" placeholder="sl_key_...">
-        </div>
-        <div class="form-group">
-          <label>HeyReach API key</label>
-          <input type="text" id="f_heyreach_api_key" placeholder="hr_key_...">
-        </div>
-      </div>
-      </details>
-
       <div class="form-row">
         <div class="form-group">
           <label>Slack Bot Token *</label>
@@ -1090,24 +1053,6 @@
           <label>Slack Channel ID *</label>
           <input type="text" id="f_slack_channel_id" placeholder="C0123456789">
         </div>
-      </div>
-
-      <div class="form-group">
-        <label>Booking link</label>
-        <input type="text" id="f_booking_link" placeholder="https://cal.com/acme/30min">
-        <div class="hint">Scheduling URL when AI drafts meeting replies (Calendly, Cal.com, etc.).</div>
-      </div>
-
-      <div class="form-group">
-        <label>Calendly personal access token (optional)</label>
-        <input type="text" id="f_calendly_personal_access_token" placeholder="pat_...">
-        <div class="hint">Only if <strong>Booking link</strong> is Calendly. With a PAT, we pull <strong>real</strong> open slots from Calendly. For other schedulers, leave blank; connect Google or Outlook below if you want slot suggestions from calendar free/busy — otherwise the draft will use the booking link without invented times.</div>
-      </div>
-
-      <div class="form-group">
-        <label>Google Sheet ID (legacy — optional)</label>
-        <input type="text" id="f_google_sheet_id" placeholder="Leave blank — prospects live in Supabase">
-        <div class="hint">SMS prospects and DNC are stored in <strong>Supabase</strong> (<code>sms_prospect</code>). Set <code>SUPABASE_URL</code> + <code>SUPABASE_SERVICE_ROLE_KEY</code> on the server. Sheet fields here are unused for SMS unless you add Sheet code back.</div>
       </div>
 
       <div class="form-group">
@@ -1128,11 +1073,6 @@
         <div class="hint">Applied to <strong>every</strong> outbound SMS from this workspace (sequences, replies, tests). Default 60000 ms = 60 seconds. Each SMS sequence can also set its own gaps.</div>
       </div>
 
-      <div class="form-group">
-        <label>Voice Prompt</label>
-        <textarea id="f_voice_prompt" placeholder="Direct, no-nonsense tone. Speak like a fellow practitioner, not a salesperson. Never use filler phrases. Keep replies to 2-3 sentences."></textarea>
-        <div class="hint">Tone for AI-drafted email/LinkedIn replies (not SMS step bodies).</div>
-      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('formModal')">Cancel</button>
@@ -1174,16 +1114,6 @@
       </div>
     </details>
 
-    <div class="guide-category">Optional: email &amp; LinkedIn replies</div>
-
-    <details class="guide-section">
-      <summary>SmartLead &amp; HeyReach (Slack drafts)</summary>
-      <div class="guide-section-body">
-        <p>If this workspace also handles <strong>email or LinkedIn</strong> webhooks, expand <strong>Email &amp; LinkedIn integrations</strong> when creating/editing the campaign and paste the API keys. Copy the webhook URLs from the <strong>Integrations</strong> tab into those tools so replies surface in Slack for approve/edit.</p>
-        <div class="guide-note">Pure SMS-only workflows can leave those keys blank.</div>
-      </div>
-    </details>
-
     <details class="guide-section">
       <summary>Slack app checklist</summary>
       <div class="guide-section-body">
@@ -1192,16 +1122,6 @@
           <li><strong>Interactivity</strong> URL: <code>https://&lt;your-domain&gt;/slack/actions</code></li>
           <li>Paste <code>xoxb-</code> token and channel ID into the campaign form.</li>
         </ol>
-      </div>
-    </details>
-
-    <div class="guide-category">Booking &amp; AI tone</div>
-
-    <details class="guide-section">
-      <summary>Calendar &amp; voice prompt</summary>
-      <div class="guide-section-body">
-        <p><strong>Booking link</strong> is used when AI drafts meeting replies. Optional <strong>Calendly PAT</strong> pulls real slots; otherwise connect Google/Outlook on the <strong>Settings</strong> tab.</p>
-        <p><strong>Voice prompt</strong> sets how Gemini sounds for approved outbound on email/LinkedIn threads.</p>
       </div>
     </details>
 
@@ -1285,7 +1205,7 @@ function renderStats() {
 }
 
 function renderGrid() {
-  const grid = document.getElementById('clientGrid');
+  const grid = document.getElementById('campaignGrid');
 
   if (clients.length === 0) {
     grid.innerHTML = `
@@ -1299,19 +1219,16 @@ function renderGrid() {
   }
 
   grid.innerHTML = clients.map(c => `
-    <div class="client-card" onclick="openDetail('${c.id}')">
-      <div class="client-card-header">
-        <span class="client-name">${esc(c.name)}</span>
+    <div class="campaign-card" onclick="openDetail('${c.id}')">
+      <div class="campaign-card-header">
+        <span class="campaign-card-title">${esc(c.name)}</span>
         <span class="status-badge ${c.active ? 'status-active' : 'status-inactive'}">
           ${c.active ? 'Running' : 'Paused'}
         </span>
       </div>
-      <div class="client-meta">
+      <div class="campaign-card-meta">
         <span class="${c.slack_bot_token ? 'key-present' : 'key-missing'}">
           ${c.slack_bot_token ? '&#10003;' : '&#10007;'} Slack
-        </span>
-        <span class="${c.booking_link ? 'key-present' : 'key-missing'}">
-          ${c.booking_link ? '&#10003;' : '&#10007;'} Booking link
         </span>
         <span style="color: var(--text-muted)">
           Created ${new Date(c.created_at).toLocaleDateString()}
@@ -1323,7 +1240,7 @@ function renderGrid() {
 
 // ─── Detail tabs ───────────────────────────────────────
 function detailTab(clientId, tab) {
-  const tabs = ['overview', 'sequence', 'leads', 'integrations', 'settings'];
+  const tabs = ['overview', 'sequence', 'leads', 'integrations'];
   tabs.forEach((t) => {
     const panel = document.getElementById(`detail_tab_${t}_${clientId}`);
     if (panel) panel.classList.toggle('active', t === tab);
@@ -1347,7 +1264,7 @@ function openDetail(id) {
   document.getElementById('detailTitle').textContent = c.name;
   const subEl = document.getElementById('detailSubtitle');
   if (subEl) {
-    subEl.textContent = (c.active ? 'Running' : 'Paused') + ' · Workspace ID ' + c.id;
+    subEl.textContent = (c.active ? 'Running' : 'Paused') + ' · ID ' + c.id;
   }
   document.getElementById('toggleActiveBtn').textContent = c.active ? 'Pause campaign' : 'Resume campaign';
 
@@ -1358,8 +1275,7 @@ function openDetail(id) {
           <button type="button" role="tab" class="campaign-tab active" aria-selected="true" data-tab="overview" onclick="detailTab('${c.id}', 'overview')">Overview</button>
           <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="sequence" onclick="detailTab('${c.id}', 'sequence')">Sequence</button>
           <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="leads" onclick="detailTab('${c.id}', 'leads')">Leads &amp; data</button>
-          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="integrations" onclick="detailTab('${c.id}', 'integrations')">Integrations</button>
-          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="settings" onclick="detailTab('${c.id}', 'settings')">Settings</button>
+          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="integrations" onclick="detailTab('${c.id}', 'integrations')">Webhooks &amp; Slack</button>
         </div>
       </div>
     </div>
@@ -1506,93 +1422,28 @@ function openDetail(id) {
     <div id="detail_tab_integrations_${c.id}" class="campaign-tab-panel" role="tabpanel">
     <div class="detail-section">
       <h4>Inbound SMS webhook</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Point your SMS provider (e.g. SMSMobileAPI) at this URL for inbound messages.</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Configure your SMS provider to POST inbound messages to this URL.</p>
       <div class="webhook-url">
         <span class="url-text">${esc(c.sms_webhook_url || '')}</span>
         <button class="copy-btn" onclick="copyText('${esc(c.sms_webhook_url || '')}', this)" title="Copy">&#128203;</button>
       </div>
     </div>
     <div class="detail-section">
-      <h4>Optional: email &amp; LinkedIn webhooks</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Only if this workspace uses SmartLead or HeyReach for AI reply drafts in Slack. Paste each URL into that tool&rsquo;s webhook settings.</p>
-      <div class="webhook-url">
-        <span class="url-text">${esc(c.smartlead_webhook_url)}</span>
-        <button class="copy-btn" onclick="copyText('${esc(c.smartlead_webhook_url)}', this)" title="Copy">&#128203;</button>
-      </div>
-      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px">Email automation tool → webhook URL</div>
-      <div class="webhook-url">
-        <span class="url-text">${esc(c.heyreach_webhook_url)}</span>
-        <button class="copy-btn" onclick="copyText('${esc(c.heyreach_webhook_url)}', this)" title="Copy">&#128203;</button>
-      </div>
-      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px">LinkedIn automation tool → webhook URL</div>
-    </div>
-    <div class="detail-section">
-      <h4>Stored keys (read-only)</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Tap to reveal. Edit from <strong>Edit settings</strong> in the footer.</p>
+      <h4>Slack (read-only)</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Notifications and manual actions use this workspace. Edit via <strong>Edit settings</strong>.</p>
       <div class="detail-row">
-        <span class="label">Slack bot token</span>
+        <span class="label">Bot token</span>
         <span class="value masked" onclick="toggleMask(this, '${esc(c.slack_bot_token || '')}')">${mask(c.slack_bot_token)}</span>
       </div>
       <div class="detail-row">
-        <span class="label">Slack channel</span>
+        <span class="label">Channel ID</span>
         <span class="value">${esc(c.slack_channel_id)}</span>
-      </div>
-      <div class="detail-row">
-        <span class="label">Email tool API key</span>
-        <span class="value masked" onclick="toggleMask(this, '${esc(c.smartlead_api_key || '')}')">${mask(c.smartlead_api_key)}</span>
-      </div>
-      <div class="detail-row">
-        <span class="label">LinkedIn tool API key</span>
-        <span class="value masked" onclick="toggleMask(this, '${esc(c.heyreach_api_key || '')}')">${mask(c.heyreach_api_key)}</span>
-      </div>
-      <div class="detail-row">
-        <span class="label">Booking link</span>
-        <span class="value">${c.booking_link ? '<a href="' + esc(c.booking_link) + '" target="_blank" style="color:var(--accent-light)">' + esc(c.booking_link) + '</a>' : '—'}</span>
-      </div>
-      <div class="detail-row">
-        <span class="label">Calendly token</span>
-        <span class="value masked" onclick="toggleMask(this, '${esc(c.calendly_personal_access_token || '')}')">${mask(c.calendly_personal_access_token)}</span>
-      </div>
-    </div>
-    </div>
-
-    <div id="detail_tab_settings_${c.id}" class="campaign-tab-panel" role="tabpanel">
-    <div class="detail-section">
-      <h4>Calendar</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Optional — used when AI suggests meeting times for email/LinkedIn threads.</p>
-      <div id="calendarStatus_${c.id}" style="font-size:13px; color:var(--text-muted)">Loading...</div>
-      <div style="display:flex; gap:8px; margin-top:10px">
-        <button class="btn btn-ghost btn-sm" onclick="connectCalendar('${c.id}', 'microsoft')">Connect Outlook</button>
-        <button class="btn btn-ghost btn-sm" onclick="connectCalendar('${c.id}', 'google')">Connect Google</button>
-      </div>
-    </div>
-
-    <div class="detail-section">
-      <h4>Voice prompt</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Tone for AI replies on email/LinkedIn (not SMS sequence bodies).</p>
-      <div style="font-size:13px; color:var(--text-muted); white-space:pre-wrap">${esc(c.voice_prompt || 'None set.')}</div>
-    </div>
-
-    <div class="detail-section">
-      <h4>Workspace</h4>
-      <div class="detail-row">
-        <span class="label">ID</span>
-        <span class="value" style="font-family:monospace; font-size:12px">${c.id}</span>
-      </div>
-      <div class="detail-row">
-        <span class="label">Created</span>
-        <span class="value">${new Date(c.created_at).toLocaleString()}</span>
-      </div>
-      <div class="detail-row">
-        <span class="label">Updated</span>
-        <span class="value">${new Date(c.updated_at).toLocaleString()}</span>
       </div>
     </div>
     </div>
   `;
 
   openModal('detailModal');
-  loadCalendarStatus(c.id);
   const secEl = document.getElementById(`sms_action_secret_${c.id}`);
   if (secEl && sessionStorage.getItem('sms_action_secret')) {
     secEl.value = sessionStorage.getItem('sms_action_secret');
@@ -1638,20 +1489,11 @@ function openEditFromDetail() {
   document.getElementById('formSubmitBtn').textContent = 'Save';
   document.getElementById('editClientId').value = c.id;
   document.getElementById('f_name').value = c.name || '';
-  document.getElementById('f_smartlead_api_key').value = c.smartlead_api_key || '';
-  document.getElementById('f_heyreach_api_key').value = c.heyreach_api_key || '';
   document.getElementById('f_slack_bot_token').value = c.slack_bot_token || '';
   document.getElementById('f_slack_channel_id').value = c.slack_channel_id || '';
-  document.getElementById('f_booking_link').value = c.booking_link || '';
-  document.getElementById('f_calendly_personal_access_token').value = c.calendly_personal_access_token || '';
-  document.getElementById('f_voice_prompt').value = c.voice_prompt || '';
-  document.getElementById('f_google_sheet_id').value = c.google_sheet_id || '';
   document.getElementById('f_sms_free_site_body').value = c.sms_free_site_body || '';
   document.getElementById('f_sms_free_site_delay_ms').value = (c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000);
   document.getElementById('f_sms_min_gap_between_texts_ms').value = (c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 60000);
-
-  const opt = document.getElementById('optionalIntegrations');
-  if (opt) opt.open = !!(c.smartlead_api_key || c.heyreach_api_key);
 
   openModal('formModal');
 }
@@ -1660,14 +1502,8 @@ async function submitForm() {
   const id = document.getElementById('editClientId').value;
   const data = {
     name: document.getElementById('f_name').value.trim(),
-    smartlead_api_key: document.getElementById('f_smartlead_api_key').value.trim() || null,
-    heyreach_api_key: document.getElementById('f_heyreach_api_key').value.trim() || null,
     slack_bot_token: document.getElementById('f_slack_bot_token').value.trim(),
     slack_channel_id: document.getElementById('f_slack_channel_id').value.trim(),
-    booking_link: document.getElementById('f_booking_link').value.trim() || null,
-    calendly_personal_access_token: document.getElementById('f_calendly_personal_access_token').value.trim() || null,
-    voice_prompt: document.getElementById('f_voice_prompt').value.trim(),
-    google_sheet_id: document.getElementById('f_google_sheet_id').value.trim() || null,
     sms_free_site_body: document.getElementById('f_sms_free_site_body').value.trim() || null,
     sms_free_site_delay_ms: parseInt(document.getElementById('f_sms_free_site_delay_ms').value, 10) || 20000,
     sms_min_gap_between_texts_ms: Math.max(0, parseInt(document.getElementById('f_sms_min_gap_between_texts_ms').value, 10) || 60000),
@@ -1711,9 +1547,7 @@ function toggleGuide() {
 }
 
 function clearForm() {
-  ['f_name', 'f_smartlead_api_key', 'f_heyreach_api_key', 'f_slack_bot_token',
-   'f_slack_channel_id', 'f_booking_link', 'f_calendly_personal_access_token', 'f_voice_prompt',
-   'f_google_sheet_id', 'f_sms_free_site_body'].forEach(id => {
+  ['f_name', 'f_slack_bot_token', 'f_slack_channel_id', 'f_sms_free_site_body'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('f_sms_free_site_delay_ms').value = '20000';
@@ -2380,51 +2214,6 @@ document.addEventListener('keydown', (e) => {
     document.querySelectorAll('.modal-overlay.active, .panel-overlay.active').forEach(m => m.classList.remove('active'));
   }
 });
-
-// ─── Calendar Connection ─────────────────────────────
-async function loadCalendarStatus(clientId) {
-  try {
-    const res = await fetch(`${API}/auth/calendar-status/${clientId}`);
-    const connections = await res.json();
-    const el = document.getElementById(`calendarStatus_${clientId}`);
-    if (!el) return;
-
-    if (connections.length === 0) {
-      el.innerHTML = '<span style="opacity:0.5">No calendar connected</span>';
-    } else {
-      el.innerHTML = connections.map(c =>
-        `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">` +
-        `<span style="color:var(--accent-light)">${c.provider === 'microsoft' ? 'Outlook' : 'Google'}: ${esc(c.email)}</span>` +
-        `<button class="btn btn-danger btn-sm" style="padding:2px 8px;font-size:11px" onclick="disconnectCalendar('${clientId}','${c.provider}')">Disconnect</button>` +
-        `</div>`
-      ).join('');
-    }
-  } catch (err) {
-    console.error('Failed to load calendar status', err);
-  }
-}
-
-function connectCalendar(clientId, provider) {
-  window.open(`${API}/auth/${provider}/connect/${clientId}`, '_blank');
-}
-
-async function disconnectCalendar(clientId, provider) {
-  await fetch(`${API}/auth/calendar/${clientId}/${provider}`, { method: 'DELETE' });
-  toast(`${provider === 'microsoft' ? 'Outlook' : 'Google'} calendar disconnected`, 'success');
-  loadCalendarStatus(clientId);
-}
-
-// Check for auth callback in URL params
-(function checkAuthCallback() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('auth') === 'success') {
-    toast(`${params.get('provider') === 'microsoft' ? 'Outlook' : 'Google'} calendar connected`, 'success');
-    window.history.replaceState({}, '', '/dashboard');
-  } else if (params.get('auth') === 'error') {
-    toast(`Failed to connect ${params.get('provider') || ''} calendar`, 'error');
-    window.history.replaceState({}, '', '/dashboard');
-  }
-})();
 
 // ─── Init ────────────────────────────────────────────
 loadClients();
