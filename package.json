@@ -13,7 +13,8 @@
     "migrate:railway": "node scripts/apply-railway-migrations.mjs",
     "railway:vars": "node scripts/list-railway-service-vars.mjs",
     "railway:deploy": "node scripts/trigger-railway-deploy.mjs",
-    "railway:status": "node scripts/railway-deployment-status.mjs"
+    "railway:status": "node scripts/railway-deployment-status.mjs",
+    "railway:sync-domain-port": "node scripts/railway-sync-service-domain-port.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",

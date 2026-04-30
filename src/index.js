@@ -1,12 +1,5 @@
 const path = require('path');
 const express = require('express');
-
-process.on('uncaughtException', (err) => {
-  console.error('[fatal] uncaughtException', err);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('[fatal] unhandledRejection', reason);
-});
 const webhookRoutes = require('./routes/webhooks');
 const slackRoutes = require('./routes/slack');
 const adminRoutes = require('./routes/admin');
@@ -46,17 +39,10 @@ app.use(smsCampaignAdminRoutes);
 app.use(authRoutes);
 app.use(testWebhookRoutes);
 
-// ─── Start ───────────────────────────────────────────────────────────
+// ─── Start — Railway: use process.env.PORT and bind 0.0.0.0
+// https://docs.railway.com/guides/fixing-common-errors
 const port = Number(PORT) || 3000;
-const listenHost = process.env.LISTEN_HOST || '0.0.0.0';
-console.log('[Server] boot — NODE_ENV=%s PORT=%s listenHost=%s', process.env.NODE_ENV || '', port, listenHost);
-app.listen(port, listenHost, () => {
-  console.log(`[Server] ReplyHandler listening on ${listenHost}:${port}`);
-  setImmediate(() => {
-    try {
-      startCron();
-    } catch (err) {
-      console.error('[Cron] failed to start', err);
-    }
-  });
+app.listen(port, '0.0.0.0', () => {
+  console.log(`[Server] ReplyHandler listening on 0.0.0.0:${port}`);
+  startCron();
 });

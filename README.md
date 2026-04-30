@@ -29,6 +29,14 @@ SKIP_DEPLOY=true node scripts/railway-upsert-env-file.mjs ./my-secrets.env
 
 Core vars already expected in production: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `SMSMOBILEAPI_KEY`, `SLACK_SIGNING_SECRET`, `WEBHOOK_TEST_SECRET`, `LEADMAGIC_API_KEY`. Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `MICROSOFT_*`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `DASHBOARD_ACTION_SECRET`.
 
+**502 “Application failed to respond” on `*.up.railway.app`:** Per [Railway’s troubleshooting guide](https://docs.railway.com/guides/fixing-common-errors), the edge proxy often cannot reach your container because the **public domain’s target port** does not match the port the process listens on (`PORT`). [Target ports](https://docs.railway.com/networking/domains/working-with-domains#target-ports) are configured per domain in **Service → Networking**. After changing `PORT` or if you see connection-refused in HTTP logs, run:
+
+```bash
+npm run railway:sync-domain-port
+```
+
+This aligns each Railway-generated domain’s `targetPort` with the rendered `PORT` variable (e.g. `8080`). The app binds `0.0.0.0` and uses `process.env.PORT` as [documented](https://docs.railway.com/guides/fixing-common-errors).
+
 - **Railway:** App service needs `DATABASE_URL` from the Postgres plugin. Apply incremental migrations with tracking:
   ```bash
   export RAILWAY_TOKEN=... RAILWAY_PROJECT_ID=... RAILWAY_ENVIRONMENT_ID=... POSTGRES_SERVICE_ID=...  # Postgres plugin service id

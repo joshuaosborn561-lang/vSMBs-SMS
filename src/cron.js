@@ -6,11 +6,6 @@ const { pollAllClients } = require('./services/gmail-poll');
 const { processDueJobs } = require('./services/sms-campaign');
 
 function startCron() {
-  if (process.env.DISABLE_CRON === '1' || process.env.DISABLE_CRON === 'true') {
-    console.log('[Cron] disabled via DISABLE_CRON — HTTP-only mode');
-    return;
-  }
-  console.log('[Cron] startCron() entering');
   // ─── Stale reply reminders (every 10 minutes) ─────────────────────
   cron.schedule('*/10 * * * *', async () => {
     console.log('[Cron] Checking for stale pending replies...');
