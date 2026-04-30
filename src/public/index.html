@@ -1603,12 +1603,6 @@ async function saveCampaignFromPanel(draftOnly) {
     return;
   }
 
-  if (!draftOnly && (!data.slack_bot_token || !data.slack_channel_id)) {
-    toast('Add Slack bot token and channel ID (step 3), or click Save draft.', 'error');
-    onboardingStep(clientId, 'settings');
-    return;
-  }
-
   try {
     const res = await fetch(`${API}/admin/clients/${clientId}`, {
       method: 'PATCH',
@@ -1627,7 +1621,13 @@ async function saveCampaignFromPanel(draftOnly) {
       subEl.textContent = (draft ? 'Draft · ' : (updated.active ? 'Running · ' : 'Paused · ')) + 'ID ' + updated.id;
     }
 
-    toast(draftOnly ? 'Draft saved' : 'Campaign saved', 'success');
+    const stillDraft = isCampaignDraft(updated);
+    if (draftOnly || stillDraft) {
+      toast(stillDraft ? 'Saved (still Draft — add Slack to go live)' : 'Draft saved', 'success');
+      if (!draftOnly && stillDraft) onboardingStep(clientId, 'settings');
+    } else {
+      toast('Campaign saved', 'success');
+    }
     renderStats();
     renderGrid();
   } catch (err) {
