@@ -10,6 +10,7 @@ const smsCampaignAdminRoutes = require('./routes/sms-campaign-admin');
 const { startCron } = require('./cron');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // ─── Body parsing ────────────────────────────────────────────────────
@@ -39,10 +40,9 @@ app.use(authRoutes);
 app.use(testWebhookRoutes);
 
 // ─── Start ───────────────────────────────────────────────────────────
-// Bind all interfaces (IPv6 :: accepts IPv4-mapped traffic on Railway’s mesh)
 const port = Number(PORT) || 3000;
-const host = process.env.LISTEN_HOST || '::';
-app.listen(port, host, () => {
-  console.log(`[Server] ReplyHandler listening on ${host}:${port}`);
+// Omit host so Node binds the default (all interfaces); Railway routes $PORT to this process.
+app.listen(port, () => {
+  console.log(`[Server] ReplyHandler listening on port ${port} (default bind)`);
   startCron();
 });
