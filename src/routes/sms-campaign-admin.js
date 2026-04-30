@@ -10,12 +10,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-function dashboardSecretOk(req) {
-  const secret = (process.env.DASHBOARD_ACTION_SECRET || process.env.WEBHOOK_TEST_SECRET || '').trim();
-  if (!secret) return false;
-  const got = (req.headers['x-dashboard-secret'] || req.headers['x-webhook-test-secret'] || '').trim();
-  return got === secret;
-}
+const { dashboardSecretOk } = require('../utils/dashboard-secret');
 
 /** GET /admin/sms/campaigns/:clientId */
 router.get('/admin/sms/campaigns/:clientId', async (req, res) => {

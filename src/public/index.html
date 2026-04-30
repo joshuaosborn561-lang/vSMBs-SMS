@@ -1225,7 +1225,6 @@
           <li><strong>Leads &amp; data</strong> &mdash; CSV / paste phones, preview merge tags, enroll.</li>
           <li><strong>Overview</strong> &mdash; SMS log, test send; <strong>Webhooks</strong> has inbound SMS URL.</li>
         </ol>
-        <div class="guide-note"><strong>Campaign PIN:</strong> paste the same value you set as <code>WEBHOOK_TEST_SECRET</code> on the server. It unlocks enroll, branching, and CSV upload from this dashboard (not your Slack token).</div>
         <div class="guide-note">Server needs <code>SUPABASE_URL</code> + service role, SMS provider keys, <code>SLACK_SIGNING_SECRET</code> for interactive Slack payloads.</div>
       </div>
     </details>
@@ -1449,10 +1448,6 @@ function openDetail(id) {
             <label>Preview phone (E.164)</label>
             <input type="text" id="sms_preview_phone_${c.id}" placeholder="+15551234567" autocomplete="tel">
           </div>
-          <div>
-            <label>Campaign PIN (<code>WEBHOOK_TEST_SECRET</code>)</label>
-            <input type="password" id="sms_action_secret_${c.id}" placeholder="Same as server WEBHOOK_TEST_SECRET — enroll, CSV, branching" autocomplete="off" onchange="sessionStorage.setItem('sms_action_secret', this.value)">
-          </div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview</button>
         <div id="sms_preview_out_${c.id}" class="sms-preview-box" style="display:none"></div>
@@ -1603,10 +1598,6 @@ function openDetail(id) {
   `;
 
   openModal('detailModal');
-  const secEl = document.getElementById(`sms_action_secret_${c.id}`);
-  if (secEl && sessionStorage.getItem('sms_action_secret')) {
-    secEl.value = sessionStorage.getItem('sms_action_secret');
-  }
   loadSmsLog(c.id);
   smsCpReloadList(c.id);
   smsSupabaseLoadProspects(c.id);
@@ -1809,10 +1800,10 @@ async function loadSmsPreview(clientId) {
   }
 }
 
-function smsCpGetSecret(clientId) {
-  const el = document.getElementById(`sms_action_secret_${clientId}`);
-  const v = (el && el.value && el.value.trim()) || sessionStorage.getItem('sms_action_secret') || '';
-  return v;
+/** Optional: set window.__dashboardActionSecret if server uses DASHBOARD_ACTION_SECRET */
+function dashHeaders() {
+  const secret = (typeof window.__dashboardActionSecret === 'string' && window.__dashboardActionSecret.trim()) || '';
+  return secret ? { 'x-dashboard-secret': secret } : {};
 }
 
 function smsCpEnsureStore(clientId) {
@@ -1936,16 +1927,14 @@ async function smsCpLoadTransitions(clientId) {
 }
 
 async function smsCpAddBranch(clientId) {
-  const secret = smsCpGetSecret(clientId);
   const sourceId = smsCpEnsureStore(clientId).campaignId;
   const targetId = document.getElementById(`sms_cp_branch_target_${clientId}`)?.value;
   const trigger = document.getElementById(`sms_cp_branch_trigger_${clientId}`)?.value;
-  if (!secret || !sourceId || !targetId) { toast('Select campaigns and enter secret', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
+  if (!sourceId || !targetId) { toast('Select source and target sequences', 'error'); return; }
   try {
     const res = await fetch(`${API}/admin/sms/transition/${clientId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
       body: JSON.stringify({ source_campaign_id: sourceId, target_campaign_id: targetId, trigger_intent: trigger }),
     });
     const j = await res.json();
@@ -1958,13 +1947,10 @@ async function smsCpAddBranch(clientId) {
 }
 
 async function smsCpDeleteBranch(clientId, sourceId, triggerIntent) {
-  const secret = smsCpGetSecret(clientId);
-  if (!secret) { toast('Enter secret', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
   try {
     const res = await fetch(`${API}/admin/sms/transition/${clientId}/${sourceId}/${encodeURIComponent(triggerIntent)}`, {
       method: 'DELETE',
-      headers: { 'x-dashboard-secret': secret },
+      headers: { ...dashHeaders() },
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Failed');
@@ -1975,18 +1961,15 @@ async function smsCpDeleteBranch(clientId, sourceId, triggerIntent) {
 }
 
 async function smsCpUploadCsv(clientId) {
-  const secret = smsCpGetSecret(clientId);
-  if (!secret) { toast('Enter Campaign PIN on Overview (same as WEBHOOK_TEST_SECRET)', 'error'); return; }
   const input = document.getElementById(`sms_cp_csv_file_${clientId}`);
   const file = input && input.files && input.files[0];
   if (!file) { toast('Choose a CSV file', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
   const fd = new FormData();
   fd.append('file', file);
   try {
     const res = await fetch(`${API}/admin/sms/staged-leads/${clientId}/csv?source_label=dashboard`, {
       method: 'POST',
-      headers: { 'x-dashboard-secret': secret },
+      headers: dashHeaders(),
       body: fd,
     });
     const j = await res.json();
@@ -2123,14 +2106,11 @@ function smsCpCollectSteps(clientId) {
 }
 
 async function smsCpNewCampaign(clientId) {
-  const secret = smsCpGetSecret(clientId);
-  if (!secret) { toast('Enter Campaign PIN on Overview first', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
   const name = (window.prompt('Sequence name?', 'Outbound sequence') || '').trim() || 'Outbound sequence';
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
       body: JSON.stringify({ name }),
     });
     const row = await res.json();
@@ -2146,7 +2126,7 @@ async function smsCpNewCampaign(clientId) {
     const steps = [{ body_template: 'Hi {{business_name}} — do you have a website for {{city}} jobs?', delay_after_ms: 86400000 }];
     await fetch(`${API}/admin/sms/campaign/${clientId}/${row.id}/steps`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
       body: JSON.stringify({ steps }),
     });
     await smsCpLoadCampaign(clientId, row.id);
@@ -2158,10 +2138,8 @@ async function smsCpNewCampaign(clientId) {
 }
 
 async function smsCpSaveMeta(clientId) {
-  const secret = smsCpGetSecret(clientId);
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!secret || !id) { toast('Pick a sequence and enter your Campaign PIN on Overview', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
+  if (!id) { toast('Pick a sequence first', 'error'); return; }
   const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Sequence';
   const active = document.getElementById(`sms_cp_active_${clientId}`).checked;
   const payload = {
@@ -2179,7 +2157,7 @@ async function smsCpSaveMeta(clientId) {
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
       body: JSON.stringify(payload),
     });
     const j = await res.json();
@@ -2193,15 +2171,13 @@ async function smsCpSaveMeta(clientId) {
 }
 
 async function smsCpSaveSteps(clientId) {
-  const secret = smsCpGetSecret(clientId);
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!secret || !id) { toast('Pick a sequence and enter your Campaign PIN on Overview', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
+  if (!id) { toast('Pick a sequence first', 'error'); return; }
   const steps = smsCpCollectSteps(clientId);
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/steps`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
       body: JSON.stringify({ steps }),
     });
     const j = await res.json();
@@ -2252,16 +2228,14 @@ async function smsCpPreview(clientId) {
 }
 
 async function smsCpEnroll(clientId) {
-  const secret = smsCpGetSecret(clientId);
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!secret || !id) { toast('Select campaign and enter secret', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
+  if (!id) { toast('Select a sequence first', 'error'); return; }
   const phones = smsCpParsePhones(document.getElementById(`sms_cp_phones_${clientId}`).value);
   if (!phones.length) { toast('Enter at least one phone', 'error'); return; }
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/enroll`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
       body: JSON.stringify({ phones }),
     });
     const j = await res.json();
@@ -2303,10 +2277,7 @@ async function smsCpLoadJobs(clientId) {
 
 async function sendTestSms(clientId) {
   const phone = document.getElementById(`sms_preview_phone_${clientId}`)?.value?.trim();
-  const secret = document.getElementById(`sms_action_secret_${clientId}`)?.value?.trim() || sessionStorage.getItem('sms_action_secret');
   if (!phone) { toast('Enter phone', 'error'); return; }
-  if (!secret) { toast('Enter Campaign PIN on Overview', 'error'); return; }
-  sessionStorage.setItem('sms_action_secret', secret);
   let body = (window._smsPreview && window._smsPreview[clientId] && window._smsPreview[clientId].rendered) || '';
   if (!body) {
     await loadSmsPreview(clientId);
@@ -2316,7 +2287,7 @@ async function sendTestSms(clientId) {
   try {
     const res = await fetch(`${API}/admin/sms/test-send/${clientId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-dashboard-secret': secret },
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
       body: JSON.stringify({ phone, body }),
     });
     const j = await res.json();

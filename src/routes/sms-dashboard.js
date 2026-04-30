@@ -8,12 +8,7 @@ const router = Router();
 
 const DEFAULT_FREE_SITE = "I actually made you a site for free — want me to send it to you?";
 
-function dashboardSecretOk(req) {
-  const secret = (process.env.DASHBOARD_ACTION_SECRET || process.env.WEBHOOK_TEST_SECRET || '').trim();
-  if (!secret) return false;
-  const got = (req.headers['x-dashboard-secret'] || req.headers['x-webhook-test-secret'] || '').trim();
-  return got === secret;
-}
+const { dashboardSecretOk } = require('../utils/dashboard-secret');
 
 /** GET /admin/sms/log/:clientId — timeline of SMS in/out with delays */
 router.get('/admin/sms/log/:clientId', async (req, res) => {
@@ -68,7 +63,10 @@ router.get('/admin/sms/preview/:clientId', async (req, res) => {
 /** POST /admin/sms/test-send/:clientId — send one SMS (requires secret header) */
 router.post('/admin/sms/test-send/:clientId', async (req, res) => {
   if (!dashboardSecretOk(req)) {
-    return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret (set WEBHOOK_TEST_SECRET or DASHBOARD_ACTION_SECRET)' });
+    return res.status(401).json({
+      error:
+        'Missing or invalid x-dashboard-secret — set DASHBOARD_ACTION_SECRET on the server if you want to lock dashboard SMS actions',
+    });
   }
   try {
     const { clientId } = req.params;

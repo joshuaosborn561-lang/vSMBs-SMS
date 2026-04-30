@@ -78,6 +78,7 @@ cp .env.example .env
 | `GEMINI_API_KEY` | Google Gemini API key for classification and drafting |
 | `SLACK_SIGNING_SECRET` | From your Slack app's Basic Information page |
 | `WEBHOOK_TEST_SECRET` | Optional. Protects `POST /admin/test/slack-draft/:clientId` for Slack-only testing |
+| `DASHBOARD_ACTION_SECRET` | Optional. If set, SMS dashboard mutations require header `x-dashboard-secret` to match (advanced); unset = open like other admin routes. For rare manual API calls from the browser console you can set `window.__dashboardActionSecret` on `/dashboard` to match |
 | `DEFAULT_BOOKING_TIMEZONE` | Optional. IANA zone for labeling verified slots (default `America/New_York`) |
 | `LEADMAGIC_API_KEY` | Lead Magic API key for LinkedIn email lookup |
 | `CALCOM_API_KEY` | Cal.com API key (if required) |
