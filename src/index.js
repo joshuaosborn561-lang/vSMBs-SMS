@@ -1,5 +1,12 @@
 const path = require('path');
 const express = require('express');
+
+process.on('uncaughtException', (err) => {
+  console.error('[fatal] uncaughtException', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[fatal] unhandledRejection', reason);
+});
 const webhookRoutes = require('./routes/webhooks');
 const slackRoutes = require('./routes/slack');
 const adminRoutes = require('./routes/admin');
@@ -41,8 +48,8 @@ app.use(testWebhookRoutes);
 
 // ─── Start ───────────────────────────────────────────────────────────
 const port = Number(PORT) || 3000;
-// Omit host so Node binds the default (all interfaces); Railway routes $PORT to this process.
-app.listen(port, () => {
-  console.log(`[Server] ReplyHandler listening on port ${port} (default bind)`);
+const listenHost = process.env.LISTEN_HOST || '0.0.0.0';
+app.listen(port, listenHost, () => {
+  console.log(`[Server] ReplyHandler listening on ${listenHost}:${port}`);
   startCron();
 });
