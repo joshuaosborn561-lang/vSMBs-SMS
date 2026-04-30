@@ -1609,10 +1609,11 @@ async function openDetail(id) {
           <input type="password" id="panel_f_slack_bot_${c.id}" value="${esc(c.slack_bot_token || '')}" placeholder="xoxb-…" autocomplete="off"></div>
         <div><label>Slack channel ID</label>
           <input type="text" id="panel_f_slack_ch_${c.id}" value="${esc(c.slack_channel_id || '')}" placeholder="C0123…"></div>
-        <div><label>Optional follow-up text (after they reply)</label>
+        <div><label>Optional auto follow-up after a <strong>positive</strong> SMS reply</label>
+          <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;line-height:1.5">When an inbound text is classified as <strong>positive</strong> (interested / not a question or objection), the system can send this message automatically after the delay below. Questions and other intents go to Slack instead — they do not trigger this SMS.</p>
           <textarea id="panel_f_body_${c.id}" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;line-height:1.45">${esc(c.sms_free_site_body || '')}</textarea></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div><label>Wait before that follow-up (seconds)</label>
+          <div><label>Wait before sending that follow-up (seconds)</label>
             <input type="number" id="panel_f_delay_${c.id}" min="0" step="1" value="${Math.round((c.sms_free_site_delay_ms != null ? Number(c.sms_free_site_delay_ms) : 20000) / 1000)}"></div>
           <div><label>Min seconds between any two texts you send</label>
             <input type="number" id="panel_f_gap_${c.id}" min="0" step="1" value="${Math.round((c.sms_min_gap_between_texts_ms != null ? Number(c.sms_min_gap_between_texts_ms) : 60000) / 1000)}"></div>
@@ -1980,7 +1981,7 @@ async function loadSmsPreview(clientId) {
     window._smsPreview[clientId] = j;
     const vars = JSON.stringify(j.variables || {}, null, 2);
     out.innerHTML =
-      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Wait before follow-up: <strong>' + (j.delay_ms != null ? (Math.round(j.delay_ms / 1000) + ' s') : '—') + '</strong> · On your list: <strong>' + (j.matched ? 'yes' : 'no') + '</strong></div>' +
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Auto follow-up after a <strong>positive</strong> reply — wait: <strong>' + (j.delay_ms != null ? (Math.round(j.delay_ms / 1000) + ' s') : '—') + '</strong> · On your list: <strong>' + (j.matched ? 'yes' : 'no') + '</strong></div>' +
       '<div style="font-size:11px;color:var(--text-muted)">Variables</div><pre style="font-size:11px;margin:4px 0 10px;white-space:pre-wrap">' + esc(vars) + '</pre>' +
       '<div style="font-size:11px;color:var(--text-muted)">Template</div><div style="opacity:0.9;margin-bottom:8px;white-space:pre-wrap">' + esc(j.template || '') + '</div>' +
       '<div style="font-size:11px;color:var(--text-muted)">Rendered (what would send)</div><div id="sms_rendered_' + clientId + '" style="font-weight:600;margin-top:4px;white-space:pre-wrap">' + esc(j.rendered || '') + '</div>';
