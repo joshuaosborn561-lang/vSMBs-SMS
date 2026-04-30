@@ -49,6 +49,7 @@ app.use(testWebhookRoutes);
 // ─── Start ───────────────────────────────────────────────────────────
 const port = Number(PORT) || 3000;
 const listenHost = process.env.LISTEN_HOST || '0.0.0.0';
+console.log('[Server] boot — NODE_ENV=%s PORT=%s listenHost=%s', process.env.NODE_ENV || '', port, listenHost);
 app.listen(port, listenHost, () => {
   console.log(`[Server] ReplyHandler listening on ${listenHost}:${port}`);
   setImmediate(() => {
