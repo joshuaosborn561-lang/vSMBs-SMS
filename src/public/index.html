@@ -1355,8 +1355,18 @@ function onboardingStep(clientId, step) {
 }
 
 // ─── Detail ──────────────────────────────────────────
-function openDetail(id) {
-  const c = clients.find(x => x.id === id);
+async function openDetail(id) {
+  let c = clients.find((x) => x.id === id);
+  try {
+    const res = await fetch(`${API}/admin/campaigns/${id}`);
+    const j = await res.json();
+    if (res.ok && j && j.id) {
+      c = j;
+      clients = clients.map((x) => (x.id === j.id ? j : x));
+    }
+  } catch (e) {
+    /* use list cache */
+  }
   if (!c) return;
   currentDetailClient = c;
 
@@ -1433,47 +1443,45 @@ function openDetail(id) {
 
         <div id="ob_sequence_${c.id}" class="ob-panel" role="tabpanel">
     <div class="detail-section">
-      <h4>Outbound sequence</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.55">Write your SMS steps. Use the variable picker to insert merge tags like SmartLead (no guessing).</p>
+      <h4>Sequence</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.55">One place for all SMS steps. Click a step body, then pick a merge field below (or after uploading CSV, click <strong>Refresh merge fields</strong>). Launch / pause is in the footer.</p>
       <div class="sms-cockpit sms-campaign-ui">
         <div id="sms_cp_editor_${c.id}">
-          <div class="sms-cp-meta">
-            <div>
-              <label>Sequence name</label>
-              <input type="text" id="sms_cp_name_${c.id}" value="${esc(c.sequence?.name || c.name || 'Sequence')}" placeholder="e.g. Cold trade — no site">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px">
+            <div style="min-width:220px;flex:1">
+              <label style="font-size:11px;color:var(--text-muted)">Insert merge field into focused step</label>
+              <select id="sms_var_global_${c.id}" style="width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:13px" onchange="onGlobalVarInsert('${c.id}', this)">
+                <option value="">Choose field…</option>
+              </select>
             </div>
-            <div class="sms-cp-active">
-              <label><input type="checkbox" id="sms_cp_active_${c.id}" ${c.sequence?.status === 'active' ? 'checked' : ''}> Active</label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="loadVariableSuggestions('${c.id}')">Refresh merge fields</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="smsCpAddStep('${c.id}')">+ Add step</button>
+          </div>
+          <details class="sms-seq-advanced" style="margin-bottom:14px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-muted)">Schedule &amp; send caps</summary>
+            <div class="sms-schedule-box" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+                <div><label style="font-size:11px;color:var(--text-muted)">Timezone (IANA)</label>
+                  <input type="text" id="sms_cp_timezone_${c.id}" value="${esc(c.sequence?.timezone || 'America/New_York')}" placeholder="America/New_York" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <div><label style="font-size:11px;color:var(--text-muted)">Window start</label>
+                  <input type="text" id="sms_cp_sched_start_${c.id}" value="${esc(c.sequence?.schedule_start || '09:00')}" placeholder="09:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <div><label style="font-size:11px;color:var(--text-muted)">Window end</label>
+                  <input type="text" id="sms_cp_sched_end_${c.id}" value="${esc(c.sequence?.schedule_end || '17:00')}" placeholder="17:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <div><label style="font-size:11px;color:var(--text-muted)">Min gap between sends (ms)</label>
+                  <input type="number" id="sms_cp_min_gap_${c.id}" min="0" step="1000" value="${c.sequence?.min_gap_between_sends_ms ?? 0}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <div><label style="font-size:11px;color:var(--text-muted)">Max sends / day (blank = none)</label>
+                  <input type="number" id="sms_cp_max_send_day_${c.id}" min="1" placeholder="∞" value="${c.sequence?.max_sends_per_day ?? ''}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+                <div><label style="font-size:11px;color:var(--text-muted)">Max new enrolls / day</label>
+                  <input type="number" id="sms_cp_max_enroll_day_${c.id}" min="1" placeholder="∞" value="${c.sequence?.max_new_enrollments_per_day ?? ''}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
+              </div>
+              <div style="margin-top:10px;font-size:11px;color:var(--text-muted)">Send on weekdays (Mon=1 … Sun=7)</div>
+              <div id="sms_cp_dow_${c.id}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
+              <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--text-muted)">
+                <input type="checkbox" id="sms_cp_exclude_other_${c.id}" ${c.sequence?.exclude_other_campaigns === false ? '' : 'checked'}> Exclude phones already in another <strong>active</strong> sequence
+              </label>
             </div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpAddStep('${c.id}')">+ Add step</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="loadVariableSuggestions('${c.id}')">Refresh variables</button>
-          </div>
-          <div class="sms-schedule-box" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
-            <h5 style="font-size:12px;color:var(--accent-light);margin-bottom:8px">Send window &amp; pacing</h5>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
-              <div><label style="font-size:11px;color:var(--text-muted)">Timezone (IANA)</label>
-                <input type="text" id="sms_cp_timezone_${c.id}" value="${esc(c.sequence?.timezone || 'America/New_York')}" placeholder="America/New_York" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
-              <div><label style="font-size:11px;color:var(--text-muted)">Window start</label>
-                <input type="text" id="sms_cp_sched_start_${c.id}" value="${esc(c.sequence?.schedule_start || '09:00')}" placeholder="09:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
-              <div><label style="font-size:11px;color:var(--text-muted)">Window end</label>
-                <input type="text" id="sms_cp_sched_end_${c.id}" value="${esc(c.sequence?.schedule_end || '17:00')}" placeholder="17:00" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
-              <div><label style="font-size:11px;color:var(--text-muted)">Min gap between sends (ms)</label>
-                <input type="number" id="sms_cp_min_gap_${c.id}" min="0" step="1000" value="${c.sequence?.min_gap_between_sends_ms ?? 0}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
-              <div><label style="font-size:11px;color:var(--text-muted)">Max sends / day (blank = none)</label>
-                <input type="number" id="sms_cp_max_send_day_${c.id}" min="1" placeholder="∞" value="${c.sequence?.max_sends_per_day ?? ''}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
-              <div><label style="font-size:11px;color:var(--text-muted)">Max new enrolls / day</label>
-                <input type="number" id="sms_cp_max_enroll_day_${c.id}" min="1" placeholder="∞" value="${c.sequence?.max_new_enrollments_per_day ?? ''}" style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></div>
-            </div>
-            <div style="margin-top:10px;font-size:11px;color:var(--text-muted)">Send on weekdays (Luxon: Mon=1 … Sun=7)</div>
-            <div id="sms_cp_dow_${c.id}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
-            <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--text-muted)">
-              <input type="checkbox" id="sms_cp_exclude_other_${c.id}" ${c.sequence?.exclude_other_campaigns === false ? '' : 'checked'}> Exclude phones already in another <strong>active</strong> sequence
-            </label>
-          </div>
+          </details>
           <div id="sms_cp_steps_${c.id}"></div>
-          <div id="sms_var_suggest_${c.id}" style="display:none;margin-top:10px;font-size:11px;color:var(--text-muted)"></div>
         </div>
       </div>
     </div>
@@ -1559,10 +1567,9 @@ function openDetail(id) {
   onboardingStep(c.id, savedStep);
   loadSmsLog(c.id);
   loadMasterInbox();
-  // Render sequence steps from the unified snapshot
   smsCpRenderDow(c.id, c.sequence?.schedule_days || [1,2,3,4,5]);
+  await loadVariableSuggestions(c.id);
   smsCpRenderSteps(c.id, (c.sequence && c.sequence.steps && c.sequence.steps.length) ? c.sequence.steps : [{ body_template: '(Draft — write your first SMS for {{business_name}})', delay_after_ms: 86400000 }]);
-  loadVariableSuggestions(c.id);
   smsSupabaseLoadProspects(c.id);
   smsSupabaseLoadEvents(c.id);
 }
@@ -1595,7 +1602,7 @@ async function openCreateCampaign() {
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || 'Could not create campaign');
     await loadClients();
-    openDetail(j.id);
+    await openDetail(j.id);
     toast('Draft created — upload leads, write sequence, then launch.', 'success');
   } catch (err) {
     toast(err.message, 'error');
@@ -1636,8 +1643,8 @@ async function saveCampaignFromPanel(draftOnly) {
   try {
     const seqSteps = smsCpCollectSteps(clientId);
     const seqMeta = {
-      name: document.getElementById(`sms_cp_name_${clientId}`)?.value?.trim() || (data.name || 'Sequence'),
-      active: !!document.getElementById(`sms_cp_active_${clientId}`)?.checked,
+      name: (data.name || 'Campaign').trim() || 'Campaign',
+      active: currentDetailClient.status === 'live',
       timezone: document.getElementById(`sms_cp_timezone_${clientId}`)?.value?.trim() || 'America/New_York',
       schedule_start: document.getElementById(`sms_cp_sched_start_${clientId}`)?.value?.trim() || '09:00',
       schedule_end: document.getElementById(`sms_cp_sched_end_${clientId}`)?.value?.trim() || '17:00',
@@ -1741,18 +1748,55 @@ async function launchCampaignFromPanel() {
 }
 
 // ─── Variable suggestions + inserter ─────────────────
+const SMS_MERGE_FIELD_PRESETS = [
+  'phone', 'business_name', 'normalized_name', 'vertical', 'city',
+  'site_url', 'sent_status', 'reply', 'intent', 'customer_status', 'dnc',
+];
+
 let _varSuggestions = {};
+let _lastStepTextarea = {};
+
+function mergeVarList(apiList) {
+  const set = new Set(SMS_MERGE_FIELD_PRESETS);
+  (apiList || []).forEach((v) => {
+    const k = String(v || '').trim();
+    if (k) set.add(k);
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+function populateGlobalVarSelect(clientId) {
+  const sel = document.getElementById(`sms_var_global_${clientId}`);
+  if (!sel) return;
+  const vars = mergeVarList(_varSuggestions[clientId]);
+  sel.innerHTML = '<option value="">Choose field…</option>' +
+    vars.map((v) => `<option value="{{${v}}}">{{${v}}}</option>`).join('');
+  sel.value = '';
+}
+
+function onGlobalVarInsert(clientId, selEl) {
+  const token = selEl && selEl.value;
+  if (!token) return;
+  let ta = document.activeElement;
+  if (!ta || !ta.classList || !ta.classList.contains('sms_cp_step_body')) {
+    ta = _lastStepTextarea[clientId] || document.querySelector(`#sms_cp_steps_${clientId} textarea.sms_cp_step_body`);
+  }
+  insertVarAtCaret(ta, token);
+  selEl.value = '';
+}
+
 async function loadVariableSuggestions(clientId) {
+  let list = [];
   try {
     const res = await fetch(`${API}/admin/campaigns/${clientId}/variables`);
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Failed');
-    _varSuggestions[clientId] = j.variables || [];
-    const el = document.getElementById(`sms_var_suggest_${clientId}`);
-    if (el) el.style.display = 'none';
+    list = j.variables || [];
   } catch (e) {
-    // ignore
+    list = [];
   }
+  _varSuggestions[clientId] = mergeVarList(list);
+  populateGlobalVarSelect(clientId);
 }
 
 function insertVarAtCaret(textarea, token) {
@@ -1920,15 +1964,24 @@ async function smsCpLoadCampaign(clientId, campaignId) {
     const c = await res.json();
     if (!res.ok) throw new Error(c.error || 'Load failed');
     smsCpEnsureStore(clientId).detail = c;
-    document.getElementById(`sms_cp_name_${clientId}`).value = c.name || '';
-    document.getElementById(`sms_cp_active_${clientId}`).checked = !!c.active;
-    document.getElementById(`sms_cp_timezone_${clientId}`).value = c.timezone || 'America/New_York';
-    document.getElementById(`sms_cp_sched_start_${clientId}`).value = c.schedule_start || '09:00';
-    document.getElementById(`sms_cp_sched_end_${clientId}`).value = c.schedule_end || '17:00';
-    document.getElementById(`sms_cp_min_gap_${clientId}`).value = c.min_gap_between_sends_ms != null ? c.min_gap_between_sends_ms : 0;
-    document.getElementById(`sms_cp_max_send_day_${clientId}`).value = c.max_sends_per_day != null ? c.max_sends_per_day : '';
-    document.getElementById(`sms_cp_max_enroll_day_${clientId}`).value = c.max_new_enrollments_per_day != null ? c.max_new_enrollments_per_day : '';
-    document.getElementById(`sms_cp_exclude_other_${clientId}`).checked = c.exclude_other_campaigns !== false;
+    const nameEl = document.getElementById(`sms_cp_name_${clientId}`);
+    if (nameEl) nameEl.value = c.name || '';
+    const activeEl = document.getElementById(`sms_cp_active_${clientId}`);
+    if (activeEl) activeEl.checked = !!c.active;
+    const tz = document.getElementById(`sms_cp_timezone_${clientId}`);
+    if (tz) tz.value = c.timezone || 'America/New_York';
+    const ss = document.getElementById(`sms_cp_sched_start_${clientId}`);
+    if (ss) ss.value = c.schedule_start || '09:00';
+    const se = document.getElementById(`sms_cp_sched_end_${clientId}`);
+    if (se) se.value = c.schedule_end || '17:00';
+    const mg = document.getElementById(`sms_cp_min_gap_${clientId}`);
+    if (mg) mg.value = c.min_gap_between_sends_ms != null ? c.min_gap_between_sends_ms : 0;
+    const msd = document.getElementById(`sms_cp_max_send_day_${clientId}`);
+    if (msd) msd.value = c.max_sends_per_day != null ? c.max_sends_per_day : '';
+    const med = document.getElementById(`sms_cp_max_enroll_day_${clientId}`);
+    if (med) med.value = c.max_new_enrollments_per_day != null ? c.max_new_enrollments_per_day : '';
+    const ex = document.getElementById(`sms_cp_exclude_other_${clientId}`);
+    if (ex) ex.checked = c.exclude_other_campaigns !== false;
     smsCpRenderDow(clientId, c.schedule_days);
     const steps = (c.steps && c.steps.length) ? c.steps : [{ sort_order: 1, body_template: 'Hi {{business_name}} — quick question about your site.', delay_after_ms: 86400000 }];
     smsCpRenderSteps(clientId, steps);
@@ -2020,6 +2073,7 @@ async function smsCpUploadCsv(clientId) {
     if (!res.ok) throw new Error(j.error || 'Upload failed');
     toast(`Imported ${j.imported} prospects (Supabase)`, 'success');
     smsSupabaseLoadProspects(clientId);
+    await loadVariableSuggestions(clientId);
     input.value = '';
   } catch (e) {
     toast(e.message, 'error');
@@ -2091,11 +2145,6 @@ function smsCpRenderSteps(clientId, steps) {
     const del = s.delay_after_ms != null ? Number(s.delay_after_ms) : 86400000;
     return `<div class="sms-step-block" data-step-index="${i}">
       <h5>Step ${ord}${ord < steps.length ? ' · wait after this step before next' : ' · final step'}</h5>
-      <div style="display:flex;justify-content:flex-end;gap:8px;align-items:center;margin:-4px 0 8px">
-        <select class="sms-var-picker" data-client="${clientId}" data-step="${i}" onchange="onVarPickerChange(this)">
-          <option value="">+ Insert variable…</option>
-        </select>
-      </div>
       <textarea class="sms_cp_step_body" placeholder="Message body with {{variables}}">${body}</textarea>
       <div class="delay-row">
         <div><label style="font-size:11px;color:var(--text-muted)">Delay after this step (ms)</label>
@@ -2105,23 +2154,11 @@ function smsCpRenderSteps(clientId, steps) {
     </div>`;
   }).join('');
 
-  // Populate variable pickers from cached suggestions.
-  const vars = _varSuggestions[clientId] || [];
-  wrap.querySelectorAll('select.sms-var-picker').forEach((sel) => {
-    const opts = ['<option value=\"\">+ Insert variable…</option>']
-      .concat(vars.map((v) => `<option value=\"{{${esc(v)}}}\">{{${esc(v)}}}</option>`));
-    sel.innerHTML = opts.join('');
+  wrap.querySelectorAll('textarea.sms_cp_step_body').forEach((ta) => {
+    ta.addEventListener('focus', () => {
+      _lastStepTextarea[clientId] = ta;
+    });
   });
-}
-
-function onVarPickerChange(selectEl) {
-  const sel = selectEl;
-  const token = sel.value;
-  if (!token) return;
-  const block = sel.closest('.sms-step-block');
-  const ta = block ? block.querySelector('textarea.sms_cp_step_body') : null;
-  insertVarAtCaret(ta, token);
-  sel.value = '';
 }
 
 function smsCpAddStep(clientId) {
@@ -2207,8 +2244,11 @@ async function smsCpNewCampaign(clientId) {
 
 function smsCpMetaPayload(clientId, opts = {}) {
   const forceDraft = !!opts.forceDraft;
-  const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Sequence';
-  const active = forceDraft ? false : document.getElementById(`sms_cp_active_${clientId}`).checked;
+  const nameFromPanel = document.getElementById(`panel_f_name_${clientId}`)?.value?.trim();
+  const nameFromSeq = document.getElementById(`sms_cp_name_${clientId}`)?.value?.trim();
+  const name = (nameFromPanel || nameFromSeq || 'Campaign').trim() || 'Campaign';
+  const activeEl = document.getElementById(`sms_cp_active_${clientId}`);
+  const active = forceDraft ? false : (activeEl ? activeEl.checked : (currentDetailClient && currentDetailClient.status === 'live'));
   const payload = {
     name,
     active,
