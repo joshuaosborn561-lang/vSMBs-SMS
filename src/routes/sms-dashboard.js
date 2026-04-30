@@ -9,6 +9,20 @@ const router = Router();
 const DEFAULT_FREE_SITE = "I actually made you a site for free — want me to send it to you?";
 
 const { dashboardSecretOk } = require('../utils/dashboard-secret');
+const { listGatewayMobiles } = require('../services/sms-gateway');
+
+/** GET /admin/sms/gateway/mobiles — SMSMobileAPI connected devices (uses server SMSMOBILEAPI_KEY) */
+router.get('/admin/sms/gateway/mobiles', async (req, res) => {
+  try {
+    const sid = req.query.sid ? String(req.query.sid) : undefined;
+    const search = req.query.search ? String(req.query.search) : undefined;
+    const data = await listGatewayMobiles({ sid, search });
+    res.json(data);
+  } catch (err) {
+    console.error('[SMS Dashboard] gateway mobiles', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /** GET /admin/sms/log — master inbox (all campaigns), newest first */
 router.get('/admin/sms/log', async (req, res) => {
@@ -91,7 +105,14 @@ router.post('/admin/sms/test-send/:clientId', async (req, res) => {
 
     const { sendSms } = require('../services/sms-gateway');
     const gw = await smsLog.getSmsGatewayOptionsForClient(clientId);
-    const result = await sendSms({ to: phone, body, ...gw });
+    let port = gw.port;
+    if (req.body?.port === 1 || req.body?.port === 2) port = req.body.port;
+    let sIdentifiant = gw.sIdentifiant;
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'sIdentifiant')) {
+      const s = String(req.body.sIdentifiant || '').trim();
+      sIdentifiant = s || undefined;
+    }
+    const result = await sendSms({ to: phone, body, port, sIdentifiant });
     await smsLog.logOutboundSent({
       clientId,
       leadPhone: phone,

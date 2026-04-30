@@ -8,6 +8,7 @@
  * @see https://api.smsmobileapi.com/sendsms/
  */
 const SEND_URL = 'https://api.smsmobileapi.com/sendsms/';
+const GATEWAY_MOBILE_LIST_URL = 'https://api.smsmobileapi.com/gateway/mobile/list/';
 
 function normalizeSimPort(raw) {
   if (raw === '' || raw == null) return null;
@@ -60,7 +61,36 @@ async function sendSms({ to, body, port, sIdentifiant } = {}) {
     );
   }
 
-  return { ok: true, id: data?.result?.id, sent: data?.result?.sent };
+  const r = data?.result || {};
+  return {
+    ok: true,
+    id: r.id,
+    sent: r.sent,
+    /** SIM port the API reports for this send (1, 2, or null) — compare after probing each slot */
+    api_port: r.port != null && r.port !== '' ? r.port : null,
+  };
 }
 
-module.exports = { sendSms };
+/**
+ * Connected Android gateway devices for this API key (dashboard / SIM labels).
+ * @see https://smsmobileapi.com/doc — Gateway → List connected mobiles
+ */
+async function listGatewayMobiles({ sid, search } = {}) {
+  const apikey = (process.env.SMSMOBILEAPI_KEY || '').trim();
+  if (!apikey) throw new Error('SMSMOBILEAPI_KEY is not set');
+  const params = new URLSearchParams({ apikey });
+  if (sid) params.set('sid', String(sid).trim());
+  if (search) params.set('search', String(search).trim());
+  const url = `${GATEWAY_MOBILE_LIST_URL}?${params.toString()}`;
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`SMSMobileAPI gateway/mobile/list non-JSON (${res.status}): ${text.slice(0, 300)}`);
+  }
+  return data;
+}
+
+module.exports = { sendSms, listGatewayMobiles };

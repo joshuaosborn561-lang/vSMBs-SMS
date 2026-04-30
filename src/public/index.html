@@ -1630,6 +1630,11 @@ async function openDetail(id) {
           <label>Optional — gateway device ID (<code>sIdentifiant</code>)</label>
           <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;line-height:1.5">Only if you have <strong>more than one phone</strong> linked to the same API key. Leave blank to use the first available device. Find the id in the SMSMobileAPI dashboard / gateway mobile list.</p>
           <input type="text" id="panel_f_sid_${c.id}" value="${esc(c.sms_gateway_device_sid || '')}" placeholder="e.g. e5b70a8a28b2ec3d" autocomplete="off" style="width:100%;max-width:480px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-family:ui-monospace,monospace;font-size:12px">
+          <div style="margin-top:12px">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsLoadGatewayMobiles('${c.id}')">Show phones linked to this API key</button>
+            <p style="font-size:11px;color:var(--text-muted);margin:8px 0 4px;line-height:1.45">Uses SMSMobileAPI <code>gateway/mobile/list</code> (same key as the server). Dual-SIM line ↔ slot is easiest to confirm by sending yourself two test SMS from step 4 with <strong>Force SIM 1</strong> vs <strong>Force SIM 2</strong> and seeing which number appears.</p>
+            <pre id="sms_gw_devices_${c.id}" style="display:none;margin-top:8px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);font-size:11px;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word"></pre>
+          </div>
         </div>
       </div>
     </div>
@@ -1656,8 +1661,16 @@ async function openDetail(id) {
         </div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview</button>
         <div id="sms_preview_out_${c.id}" class="sms-preview-box" style="display:none"></div>
-        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')">Send test SMS</button>
+        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <div>
+            <label style="font-size:11px;color:var(--text-muted)">Which SIM for this test only</label>
+            <select id="sms_test_port_${c.id}" style="display:block;margin-top:4px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:12px">
+              <option value="">Use campaign setting (Settings tab)</option>
+              <option value="1">Force SIM slot 1</option>
+              <option value="2">Force SIM slot 2</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')" style="margin-top:18px">Send test SMS</button>
         </div>
         <h4 style="margin-top:16px;font-size:11px;color:var(--text-muted)">This campaign — SMS log</h4>
         <div id="sms_log_wrap_${c.id}" class="sms-log-wrap"><div style="opacity:0.5;font-size:12px">Loading…</div></div>
@@ -2735,6 +2748,21 @@ async function smsCpLoadJobs(clientId) {
   }
 }
 
+async function smsLoadGatewayMobiles(clientId) {
+  const pre = document.getElementById(`sms_gw_devices_${clientId}`);
+  if (!pre) return;
+  pre.style.display = 'block';
+  pre.textContent = 'Loading…';
+  try {
+    const res = await fetch(`${API}/admin/sms/gateway/mobiles`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Failed');
+    pre.textContent = JSON.stringify(j, null, 2);
+  } catch (e) {
+    pre.textContent = e.message;
+  }
+}
+
 async function sendTestSms(clientId) {
   const phone = document.getElementById(`sms_preview_phone_${clientId}`)?.value?.trim();
   if (!phone) { toast('Enter phone', 'error'); return; }
@@ -2744,15 +2772,20 @@ async function sendTestSms(clientId) {
     body = (window._smsPreview && window._smsPreview[clientId] && window._smsPreview[clientId].rendered) || '';
   }
   if (!body) { toast('Load preview first (add prospect in Supabase / CSV)', 'error'); return; }
+  const portSel = document.getElementById(`sms_test_port_${clientId}`);
+  const pv = portSel && portSel.value !== '' ? parseInt(portSel.value, 10) : null;
+  const payload = { phone, body };
+  if (pv === 1 || pv === 2) payload.port = pv;
   try {
     const res = await fetch(`${API}/admin/sms/test-send/${clientId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...dashHeaders() },
-      body: JSON.stringify({ phone, body }),
+      body: JSON.stringify(payload),
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Send failed');
-    toast('Test SMS sent', 'success');
+    const ap = j.provider && j.provider.api_port != null ? String(j.provider.api_port) : '';
+    toast(ap ? `Test SMS sent · API reports SIM port: ${ap}` : 'Test SMS sent', 'success');
     loadSmsLog(clientId);
   } catch (e) {
     toast(e.message, 'error');
