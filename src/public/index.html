@@ -1531,6 +1531,12 @@ function openDetail(id) {
     </div>
   `;
 
+  try {
+    const savedPhones = sessionStorage.getItem(`sms_enroll_draft_${c.id}`);
+    const ta = document.getElementById(`sms_cp_phones_${c.id}`);
+    if (savedPhones != null && ta) ta.value = savedPhones;
+  } catch (e) {}
+
   openModal('detailModal');
   let savedStep = 'upload';
   try {
@@ -1597,6 +1603,13 @@ async function saveCampaignFromPanel(draftOnly) {
   const clientId = c.id;
   const data = readPanelCampaignPayload(clientId);
 
+  const enrollTa = document.getElementById(`sms_cp_phones_${clientId}`);
+  if (enrollTa) {
+    try {
+      sessionStorage.setItem(`sms_enroll_draft_${clientId}`, enrollTa.value);
+    } catch (e) {}
+  }
+
   if (!data.name) {
     toast('Campaign name is required', 'error');
     onboardingStep(clientId, 'settings');
@@ -1621,12 +1634,22 @@ async function saveCampaignFromPanel(draftOnly) {
       subEl.textContent = (draft ? 'Draft · ' : (updated.active ? 'Running · ' : 'Paused · ')) + 'ID ' + updated.id;
     }
 
+    let seqNote = '';
+    try {
+      const seqResult = await smsCpPersistSequenceSnapshot(clientId, { forceDraft: draftOnly });
+      if (seqResult.saved) {
+        seqNote = draftOnly ? ' Sequence saved as draft.' : ' Sequence saved.';
+      }
+    } catch (seqErr) {
+      seqNote = ` (${seqErr.message || 'sequence not saved'} — pick a sequence on step 2 or check dashboard secret)`;
+    }
+
     const stillDraft = isCampaignDraft(updated);
     if (draftOnly || stillDraft) {
-      toast(stillDraft ? 'Saved (still Draft — add Slack to go live)' : 'Draft saved', 'success');
+      toast((stillDraft ? 'Saved (still Draft — add Slack to go live)' : 'Draft saved') + seqNote, 'success');
       if (!draftOnly && stillDraft) onboardingStep(clientId, 'settings');
     } else {
-      toast('Campaign saved', 'success');
+      toast('Campaign saved' + seqNote, 'success');
     }
     renderStats();
     renderGrid();
@@ -2091,18 +2114,17 @@ async function smsCpNewCampaign(clientId) {
       body: JSON.stringify({ steps }),
     });
     await smsCpLoadCampaign(clientId, row.id);
-    detailTab(clientId, 'sequence');
+    onboardingStep(clientId, 'sequence');
     toast('Sequence created', 'success');
   } catch (e) {
     toast(e.message, 'error');
   }
 }
 
-async function smsCpSaveMeta(clientId) {
-  const id = smsCpEnsureStore(clientId).campaignId;
-  if (!id) { toast('Pick a sequence first', 'error'); return; }
+function smsCpMetaPayload(clientId, opts = {}) {
+  const forceDraft = !!opts.forceDraft;
   const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Sequence';
-  const active = document.getElementById(`sms_cp_active_${clientId}`).checked;
+  const active = forceDraft ? false : document.getElementById(`sms_cp_active_${clientId}`).checked;
   const payload = {
     name,
     active,
@@ -2115,6 +2137,53 @@ async function smsCpSaveMeta(clientId) {
     max_new_enrollments_per_day: (() => { const v = document.getElementById(`sms_cp_max_enroll_day_${clientId}`)?.value?.trim(); return v === '' ? null : (parseInt(v, 10) || null); })(),
     exclude_other_campaigns: document.getElementById(`sms_cp_exclude_other_${clientId}`)?.checked !== false,
   };
+  if (forceDraft) {
+    payload.status = 'draft';
+    payload.active = false;
+  }
+  return payload;
+}
+
+/** Saves SMS sequence meta + steps from the panel. Used by footer Save draft / Save campaign and by inline buttons. */
+async function smsCpPersistSequenceSnapshot(clientId, opts = {}) {
+  const forceDraft = !!opts.forceDraft;
+  const id = smsCpEnsureStore(clientId).campaignId;
+  if (!id) return { saved: false, reason: 'no_sequence' };
+  const metaPayload = smsCpMetaPayload(clientId, { forceDraft });
+  const resMeta = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...dashHeaders() },
+    body: JSON.stringify(metaPayload),
+  });
+  const jMeta = await resMeta.json().catch(() => ({}));
+  if (!resMeta.ok) throw new Error(jMeta.error || 'Could not save sequence settings');
+
+  let steps = smsCpCollectSteps(clientId);
+  let resSteps = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/steps`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...dashHeaders() },
+    body: JSON.stringify(forceDraft ? { steps, draft: true } : { steps }),
+  });
+  let jSteps = await resSteps.json().catch(() => ({}));
+  if (!resSteps.ok && forceDraft && String(jSteps.error || '').includes('body is required')) {
+    resSteps = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/steps`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...dashHeaders() },
+      body: JSON.stringify({ steps, draft: true }),
+    });
+    jSteps = await resSteps.json().catch(() => ({}));
+  }
+  if (!resSteps.ok) throw new Error(jSteps.error || 'Could not save sequence steps');
+
+  await smsCpReloadList(clientId);
+  await smsCpLoadCampaign(clientId, id);
+  return { saved: true, sequenceId: id };
+}
+
+async function smsCpSaveMeta(clientId) {
+  const id = smsCpEnsureStore(clientId).campaignId;
+  if (!id) { toast('Pick a sequence first', 'error'); return; }
+  const payload = smsCpMetaPayload(clientId, { forceDraft: false });
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}`, {
       method: 'PATCH',
@@ -2134,8 +2203,8 @@ async function smsCpSaveMeta(clientId) {
 async function smsCpSaveSteps(clientId) {
   const id = smsCpEnsureStore(clientId).campaignId;
   if (!id) { toast('Pick a sequence first', 'error'); return; }
-  const steps = smsCpCollectSteps(clientId);
   try {
+    const steps = smsCpCollectSteps(clientId);
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}/${id}/steps`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...dashHeaders() },

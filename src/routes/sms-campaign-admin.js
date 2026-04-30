@@ -86,10 +86,12 @@ router.put('/admin/sms/campaign/:clientId/:campaignId/steps', async (req, res) =
     return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
   }
   try {
+    const draftMode = !!(req.body && req.body.draft);
     const camp = await smsCampaign.replaceSteps(
       req.params.clientId,
       req.params.campaignId,
-      (req.body && req.body.steps) || []
+      (req.body && req.body.steps) || [],
+      { draftMode }
     );
     res.json(camp);
   } catch (err) {

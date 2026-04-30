@@ -139,7 +139,8 @@ async function updateCampaign(clientId, campaignId, body = {}) {
   return getCampaignWithSteps(campaignId, clientId);
 }
 
-async function replaceSteps(clientId, campaignId, stepsInput) {
+async function replaceSteps(clientId, campaignId, stepsInput, options = {}) {
+  const draftMode = !!(options && options.draftMode);
   const camp = await getCampaignWithSteps(campaignId, clientId);
   if (!camp) throw new Error('Campaign not found');
 
@@ -152,8 +153,11 @@ async function replaceSteps(clientId, campaignId, stepsInput) {
     for (let i = 0; i < steps.length; i += 1) {
       const s = steps[i];
       const sortOrder = i + 1;
-      const body = String(s.body_template || s.body || '').trim();
-      if (!body) throw new Error(`Step ${sortOrder}: body is required`);
+      let body = String(s.body_template || s.body || '').trim();
+      if (!body) {
+        if (!draftMode) throw new Error(`Step ${sortOrder}: body is required`);
+        body = '(Draft — add message text)';
+      }
       const delayMs = Math.max(0, parseInt(s.delay_after_ms ?? s.delay_ms ?? 86400000, 10) || 0);
       await db.query(
         `INSERT INTO sms_campaign_step (campaign_id, sort_order, body_template, delay_after_ms)
