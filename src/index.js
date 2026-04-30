@@ -39,7 +39,9 @@ app.use(authRoutes);
 app.use(testWebhookRoutes);
 
 // ─── Start ───────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`[Server] ReplyHandler running on port ${PORT}`);
+// Bind 0.0.0.0 so Railway / Docker can route to the container (avoids connection refused on health checks)
+const host = '0.0.0.0';
+app.listen(PORT, host, () => {
+  console.log(`[Server] ReplyHandler running on http://${host}:${PORT}`);
   startCron();
 });
