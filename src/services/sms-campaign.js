@@ -715,6 +715,7 @@ module.exports = {
   createCampaign,
   updateCampaign,
   replaceSteps,
+  previewSteps,
   previewCampaign: previewSteps,
   enrollLeads,
   listEnrollments,

@@ -1466,6 +1466,9 @@ async function openDetail(id) {
   }
   if (!c) return;
   currentDetailClient = c;
+  try {
+    smsCpEnsureStore(c.id).campaignId = c.sequence && c.sequence.id ? c.sequence.id : null;
+  } catch (e) {}
 
   document.getElementById('detailTitle').textContent = c.name;
   const subEl = document.getElementById('detailSubtitle');
@@ -1998,6 +2001,28 @@ function smsCpEnsureStore(clientId) {
   return window._smsCp[clientId];
 }
 
+const SMS_MS_PER_HOUR = 3600000;
+
+function smsStepDelayMsFromHoursInput(val) {
+  const h = parseFloat(String(val || '').replace(',', '.'));
+  if (!Number.isFinite(h) || h < 0) return 0;
+  return Math.round(h * SMS_MS_PER_HOUR);
+}
+
+function smsStepDelayHoursFromMs(ms) {
+  if (ms == null || ms === '') return 24;
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return 24;
+  return Math.round((n / SMS_MS_PER_HOUR) * 10000) / 10000;
+}
+
+function smsFormatDelayAfterHours(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return '—';
+  const h = Math.round((n / SMS_MS_PER_HOUR) * 1000) / 1000;
+  return h + ' h';
+}
+
 function smsCpPrimaryId(clientId) {
   const c = clients.find((x) => x.id === clientId);
   return c && c.sequence && c.sequence.id ? c.sequence.id : null;
@@ -2336,13 +2361,13 @@ function smsCpRenderSteps(clientId, steps) {
   wrap.innerHTML = steps.map((s, i) => {
     const ord = i + 1;
     const body = esc(s.body_template || s.body || '');
-    const delSec = s.delay_after_ms != null ? Math.round(Number(s.delay_after_ms) / 1000) : 86400;
+    const delH = smsStepDelayHoursFromMs(s.delay_after_ms);
     return `<div class="sms-step-block" data-step-index="${i}">
       <h5>Step ${ord}${ord < steps.length ? ' · wait after this step before next' : ' · final step'}</h5>
       <textarea class="sms_cp_step_body" placeholder="Message body with {{variables}}">${body}</textarea>
       <div class="delay-row">
-        <div><label style="font-size:11px;color:var(--text-muted)">Wait before next step (seconds)</label>
-        <input type="number" class="sms_cp_step_delay" min="0" step="1" value="${delSec}"></div>
+        <div><label style="font-size:11px;color:var(--text-muted)">Wait before next step (hours)</label>
+        <input type="number" class="sms_cp_step_delay" min="0" step="0.25" value="${delH}"></div>
         <div style="display:flex;align-items:flex-end"><button type="button" class="btn btn-danger btn-sm" onclick="smsCpRemoveStep('${clientId}',${i})">Remove step</button></div>
       </div>
     </div>`;
@@ -2364,7 +2389,7 @@ function smsCpAddStep(clientId) {
     const delay = block.querySelector('.sms_cp_step_delay');
     steps.push({
       body_template: body ? body.value : '',
-      delay_after_ms: delay ? Math.max(0, (parseInt(delay.value, 10) || 0) * 1000) : 0,
+      delay_after_ms: delay ? smsStepDelayMsFromHoursInput(delay.value) : 0,
     });
   });
   steps.push({ body_template: 'Follow-up: {{business_name}}', delay_after_ms: 86400000 });
@@ -2381,7 +2406,7 @@ function smsCpRemoveStep(clientId, index) {
     const delay = block.querySelector('.sms_cp_step_delay');
     steps.push({
       body_template: body ? body.value : '',
-      delay_after_ms: delay ? Math.max(0, (parseInt(delay.value, 10) || 0) * 1000) : 0,
+      delay_after_ms: delay ? smsStepDelayMsFromHoursInput(delay.value) : 0,
     });
   });
   if (!steps.length) steps.push({ body_template: '', delay_after_ms: 86400000 });
@@ -2397,7 +2422,7 @@ function smsCpCollectSteps(clientId) {
     const delay = block.querySelector('.sms_cp_step_delay');
     steps.push({
       body_template: body ? body.value.trim() : '',
-      delay_after_ms: delay ? Math.max(0, (parseInt(delay.value, 10) || 0) * 1000) : 0,
+      delay_after_ms: delay ? smsStepDelayMsFromHoursInput(delay.value) : 0,
     });
   });
   return steps;
@@ -2566,7 +2591,7 @@ async function smsCpPreview(clientId) {
     const prev = j.previews || [];
     out.innerHTML = prev.map(p => {
       const stepsHtml = (p.steps || []).map(st =>
-        `<div style="margin:6px 0;padding-left:8px;border-left:2px solid var(--border)"><strong>Step ${st.sort_order}</strong> · delay after: ${st.delay_after_ms} ms<br><span style="opacity:0.85;white-space:pre-wrap">${esc(st.rendered)}</span></div>`
+        `<div style="margin:6px 0;padding-left:8px;border-left:2px solid var(--border)"><strong>Step ${st.sort_order}</strong> · wait after: ${smsFormatDelayAfterHours(st.delay_after_ms)}<br><span style="opacity:0.85;white-space:pre-wrap">${esc(st.rendered)}</span></div>`
       ).join('');
       return `<div class="sms-cp-preview-item"><strong>${esc(p.phone)}</strong> · prospect: ${p.matched ? 'yes' : 'no'}<br>${stepsHtml}</div>`;
     }).join('') || '<div>No previews</div>';
