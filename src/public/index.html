@@ -922,6 +922,83 @@
     }
 
     .masked:hover { color: var(--accent); }
+
+    /* ─── Campaign panel tabs (detail slide-over) ─── */
+    .panel-detail-head {
+      padding: 0 24px 12px;
+      border-bottom: 1px solid var(--border);
+      margin: 0 -24px 0;
+    }
+    .panel-detail-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .campaign-tabs {
+      margin-top: 8px;
+    }
+    .campaign-tabs-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 4px;
+      background: var(--surface-2);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .campaign-tab {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .campaign-tab:hover {
+      background: rgba(45, 106, 63, 0.08);
+      color: var(--text);
+    }
+    .campaign-tab.active {
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: var(--shadow-sm);
+    }
+    .campaign-tab-panel {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+    .campaign-tab-panel.active {
+      display: block;
+    }
+    .optional-form-block {
+      margin-top: 8px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 0 14px;
+      background: var(--bg);
+    }
+    .optional-form-block summary {
+      cursor: pointer;
+      padding: 12px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      list-style: none;
+    }
+    .optional-form-block summary::-webkit-details-marker { display: none; }
+    .optional-form-block[open] summary {
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .optional-form-block .form-group:last-child { margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -936,12 +1013,12 @@
       </div>
       <div class="sidebar-brand-text">
         <h1><span class="brand-sales">Sales</span><span class="brand-glider">Glider</span></h1>
-        <p class="sidebar-tagline">SMS, Slack, and inbox routing in one place.</p>
+        <p class="sidebar-tagline">SMS sequences, preview, and sending.</p>
       </div>
     </div>
     <nav class="sidebar-nav" aria-label="Sections">
-      <a href="#clients" class="active" onclick="return false">Clients</a>
-      <a href="#guide" onclick="toggleGuide(); return false;">Setup guide</a>
+      <a href="#campaigns" class="active" onclick="return false">Campaigns</a>
+      <a href="#guide" onclick="toggleGuide(); return false;">How it works</a>
     </nav>
     <p class="sidebar-footer">Prospects &amp; campaign events are stored in Supabase when configured on the server.</p>
   </aside>
@@ -949,13 +1026,13 @@
   <div class="app-main">
     <header class="main-header">
       <div>
-        <div class="main-header-eyebrow">Operations</div>
-        <h2 id="clients">Client workspace</h2>
-        <p class="main-header-sub">Wire SmartLead, HeyReach, Slack, and SMS — open a card for webhooks, calendars, and the SMS campaign console.</p>
+        <div class="main-header-eyebrow">SMS outreach</div>
+        <h2 id="campaigns">Campaigns</h2>
+        <p class="main-header-sub">Each campaign is a workspace: build sequences, upload leads, preview messages, and wire Slack. Open one to work step-by-step in tabs — like a lightweight sequence builder.</p>
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh list</button>
-        <button class="btn btn-primary" onclick="openCreateModal()">Add client</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadClients()">Refresh</button>
+        <button class="btn btn-primary" onclick="openCreateModal()">New campaign</button>
       </div>
     </header>
 
@@ -963,7 +1040,7 @@
       <div class="stats" id="stats"></div>
 
       <div class="toolbar">
-        <h2>Your clients</h2>
+        <h2>All campaigns</h2>
       </div>
 
       <div class="client-grid" id="clientGrid"></div>
@@ -975,9 +1052,9 @@
 <div class="modal-overlay" id="formModal">
   <div class="modal">
     <div class="modal-header">
-      <h3 id="formTitle">Add Client</h3>
+      <h3 id="formTitle">New campaign</h3>
       <div class="modal-header-actions">
-        <button class="modal-guide-btn" id="guideToggleBtn" onclick="toggleGuide()" title="Setup guide">&#9432; Guide</button>
+        <button class="modal-guide-btn" id="guideToggleBtn" onclick="toggleGuide()" title="How it works">&#9432; Help</button>
         <button class="modal-close" onclick="closeModal('formModal')">&times;</button>
       </div>
     </div>
@@ -985,20 +1062,24 @@
       <input type="hidden" id="editClientId">
 
       <div class="form-group">
-        <label>Client Name *</label>
-        <input type="text" id="f_name" placeholder="Acme Corp">
+        <label>Campaign name *</label>
+        <input type="text" id="f_name" placeholder="e.g. Cold outreach — Dallas plumbers">
       </div>
 
+      <details class="optional-form-block" id="optionalIntegrations">
+        <summary>Email &amp; LinkedIn integrations (optional)</summary>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">Only if this workspace receives SmartLead or HeyReach webhooks for AI replies in Slack. Pure SMS campaigns can skip this.</p>
       <div class="form-row">
         <div class="form-group">
-          <label>SmartLead API Key</label>
+          <label>SmartLead API key</label>
           <input type="text" id="f_smartlead_api_key" placeholder="sl_key_...">
         </div>
         <div class="form-group">
-          <label>HeyReach API Key</label>
+          <label>HeyReach API key</label>
           <input type="text" id="f_heyreach_api_key" placeholder="hr_key_...">
         </div>
       </div>
+      </details>
 
       <div class="form-row">
         <div class="form-group">
@@ -1012,9 +1093,9 @@
       </div>
 
       <div class="form-group">
-        <label>Booking Link</label>
+        <label>Booking link</label>
         <input type="text" id="f_booking_link" placeholder="https://cal.com/acme/30min">
-        <div class="hint">Client's scheduling page URL (Calendly, Cal.com, SavvyCal, etc). Always included when a meeting is discussed.</div>
+        <div class="hint">Scheduling URL when AI drafts meeting replies (Calendly, Cal.com, etc.).</div>
       </div>
 
       <div class="form-group">
@@ -1044,18 +1125,18 @@
       <div class="form-group">
         <label>Minimum gap between outbound texts (milliseconds)</label>
         <input type="number" id="f_sms_min_gap_between_texts_ms" placeholder="60000" min="0" step="500" value="60000">
-        <div class="hint">Applied to <strong>every</strong> outbound SMS for this client (sequences, replies, tests) so sends are spaced for carrier compliance. Default 60000 ms = 60 seconds. Campaign sequences also have their own schedule/gaps.</div>
+        <div class="hint">Applied to <strong>every</strong> outbound SMS from this workspace (sequences, replies, tests). Default 60000 ms = 60 seconds. Each SMS sequence can also set its own gaps.</div>
       </div>
 
       <div class="form-group">
         <label>Voice Prompt</label>
         <textarea id="f_voice_prompt" placeholder="Direct, no-nonsense tone. Speak like a fellow practitioner, not a salesperson. Never use filler phrases. Keep replies to 2-3 sentences."></textarea>
-        <div class="hint">Describes how AI-drafted replies should sound for this client.</div>
+        <div class="hint">Tone for AI-drafted email/LinkedIn replies (not SMS step bodies).</div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('formModal')">Cancel</button>
-      <button class="btn btn-primary" id="formSubmitBtn" onclick="submitForm()">Create Client</button>
+      <button class="btn btn-primary" id="formSubmitBtn" onclick="submitForm()">Create campaign</button>
     </div>
   </div>
 </div>
@@ -1063,157 +1144,76 @@
 <!-- Guide Drawer -->
 <div class="guide-drawer" id="guideDrawer">
   <div class="guide-header">
-    <h3>Setup Guide</h3>
+    <h3>How this app works</h3>
     <button class="modal-close" onclick="toggleGuide()">&times;</button>
   </div>
   <div class="guide-body">
 
-    <div class="guide-category">Form Fields</div>
+    <p style="font-size:13px;color:var(--text-muted);line-height:1.65;margin-bottom:16px">This console is for <strong>SMS outreach</strong>: sequences, lead lists, preview, pacing, and Supabase-backed prospects. Use the tabs inside a campaign so you are not staring at one endless page.</p>
 
-    <details class="guide-section">
-      <summary>Client Name</summary>
-      <div class="guide-section-body">
-        <p>Any label that helps you identify the client internally. Can be the company name or a shorthand like "acme-ops".</p>
-      </div>
-    </details>
+    <div class="guide-category">Quick start</div>
 
-    <details class="guide-section">
-      <summary>SmartLead API Key</summary>
+    <details class="guide-section" open>
+      <summary>Create and send an SMS sequence</summary>
       <div class="guide-section-body">
-        <p><strong>Use this client&rsquo;s own key</strong> &mdash; ideally a <strong>client-level</strong> key from SmartLead (agency mode), so it only ever sees <em>that</em> customer&rsquo;s campaigns. The app checks every webhook: the campaign must belong to the key you paste here, or the event is ignored (nothing posted to Slack).</p>
         <ol>
-          <li>Log in to SmartLead as the workspace that owns <em>this</em> customer&rsquo;s campaigns</li>
-          <li>Profile avatar (top right) &rarr; <strong>Settings</strong> &rarr; <strong>API Keys</strong></li>
-          <li>Create a key for that client (SmartLead&rsquo;s docs: &ldquo;client-level API keys&rdquo; for agencies) and copy it here</li>
+          <li><strong>New campaign</strong> &mdash; pick a name and paste Slack bot token + channel (human review lives there).</li>
+          <li>Open the campaign card &rarr; <strong>Sequence</strong> tab &rarr; create or pick an SMS campaign, set send window and gaps (carrier-safe defaults help).</li>
+          <li><strong>Leads</strong> tab &rarr; upload CSV or paste phones, preview merged messages, then enroll.</li>
+          <li><strong>Overview</strong> tab &rarr; test-send or watch the SMS log; inbound replies get sentiment and STOP auto-DNC.</li>
         </ol>
-        <div class="guide-note">Leave blank if this client doesn't run email campaigns.</div>
+        <div class="guide-note">Server needs <code>SUPABASE_URL</code> + <code>SUPABASE_SERVICE_ROLE_KEY</code>, SMS provider keys (e.g. SMSMobileAPI), and Slack signing secret for buttons.</div>
       </div>
     </details>
 
     <details class="guide-section">
-      <summary>HeyReach API Key</summary>
+      <summary>Where data lives</summary>
       <div class="guide-section-body">
-        <p><strong>One HeyReach workspace = one API key.</strong> Generate the key <em>inside that client&rsquo;s</em> HeyReach account so it only ever touches their campaigns and inboxes. We still verify each webhook&rsquo;s campaign id against their key before posting to Slack.</p>
+        <p><strong>Railway Postgres</strong> holds campaign workspace settings and job queue metadata.</p>
+        <p><strong>Supabase</strong> (separate project) stores <code>sms_prospect</code>, <code>campaign_event_log</code>, and related logs &mdash; apply the SQL in <code>supabase/schema-reference.sql</code> to your Supabase project.</p>
+      </div>
+    </details>
+
+    <div class="guide-category">Optional: email &amp; LinkedIn replies</div>
+
+    <details class="guide-section">
+      <summary>SmartLead &amp; HeyReach (Slack drafts)</summary>
+      <div class="guide-section-body">
+        <p>If this workspace also handles <strong>email or LinkedIn</strong> webhooks, expand <strong>Email &amp; LinkedIn integrations</strong> when creating/editing the campaign and paste the API keys. Copy the webhook URLs from the <strong>Integrations</strong> tab into those tools so replies surface in Slack for approve/edit.</p>
+        <div class="guide-note">Pure SMS-only workflows can leave those keys blank.</div>
+      </div>
+    </details>
+
+    <details class="guide-section">
+      <summary>Slack app checklist</summary>
+      <div class="guide-section-body">
         <ol>
-          <li>Log in to <a href="https://app.heyreach.io" target="_blank">HeyReach</a> as <strong>that client&rsquo;s</strong> workspace (or their sub-account, however you separate clients)</li>
-          <li><strong>Settings</strong> &rarr; <strong>Integrations</strong> &rarr; <strong>API Keys</strong> &rarr; <strong>Generate New Key</strong></li>
+          <li><a href="https://api.slack.com/apps" target="_blank">Slack app</a> &mdash; bot scopes: <code>chat:write</code>, <code>chat:write.public</code>, <code>channels:history</code>, <code>im:write</code> (reinstall after changes).</li>
+          <li><strong>Interactivity</strong> URL: <code>https://&lt;your-domain&gt;/slack/actions</code></li>
+          <li>Paste <code>xoxb-</code> token and channel ID into the campaign form.</li>
         </ol>
-        <div class="guide-note">Leave blank if this client doesn't run LinkedIn campaigns. Webhooks must include a <code>campaignId</code> (or <code>campaign_id</code>) so we can match the event to their campaigns.</div>
       </div>
     </details>
 
+    <div class="guide-category">Booking &amp; AI tone</div>
+
     <details class="guide-section">
-      <summary>Slack Bot Token</summary>
+      <summary>Calendar &amp; voice prompt</summary>
+      <div class="guide-section-body">
+        <p><strong>Booking link</strong> is used when AI drafts meeting replies. Optional <strong>Calendly PAT</strong> pulls real slots; otherwise connect Google/Outlook on the <strong>Settings</strong> tab.</p>
+        <p><strong>Voice prompt</strong> sets how Gemini sounds for approved outbound on email/LinkedIn threads.</p>
+      </div>
+    </details>
+
+    <div class="guide-category">Hosting</div>
+
+    <details class="guide-section">
+      <summary>Railway deploy</summary>
       <div class="guide-section-body">
         <ol>
-          <li>Go to <a href="https://api.slack.com/apps" target="_blank">api.slack.com/apps</a> and open your SalesGlider Slack app</li>
-          <li>Click <strong>OAuth &amp; Permissions</strong> in the left sidebar</li>
-          <li>Scroll to <strong>Bot Token Scopes</strong> and add these (then <strong>Reinstall to Workspace</strong> so the token picks them up):
-            <ul>
-              <li><code>chat:write</code> &mdash; required to post drafts and alerts</li>
-              <li><code>chat:write.public</code> &mdash; post in channels the bot hasn&rsquo;t joined yet (prefer inviting the bot anyway)</li>
-              <li><code>channels:history</code></li>
-              <li><code>im:write</code></li>
-            </ul>
-            <div class="guide-note">If Slack returns <code>missing_scope</code>, open the app&rsquo;s <strong>OAuth &amp; Permissions</strong> page &mdash; Slack often shows which scope is missing. After any scope change, copy the new <code>xoxb-</code> token into the client record in this dashboard.</div>
-          </li>
-          <li>Under <strong>Interactivity &amp; Shortcuts</strong>, set the Request URL to <code>https://YOUR-RAILWAY-DOMAIN/slack/actions</code> so <strong>Approve</strong>, <strong>Edit &amp; send</strong>, and <strong>Reject</strong> work</li>
-          <li>Scroll back up and copy the <strong>Bot User OAuth Token</strong> (starts with <code>xoxb-</code>)</li>
-        </ol>
-        <div class="guide-note"><strong>Same token for all clients</strong> if they share the same Slack workspace. Different workspaces need different apps &amp; tokens.</div>
-      </div>
-    </details>
-
-    <details class="guide-section">
-      <summary>Slack Channel ID</summary>
-      <div class="guide-section-body">
-        <ol>
-          <li>In Slack, create a dedicated channel for this client (e.g. <code>#acme-replies</code>)</li>
-          <li><strong>Invite the bot</strong> to the channel: type <code>/invite @YourBotName</code> in the channel</li>
-          <li>Right-click the channel name in the sidebar &rarr; <strong>View channel details</strong></li>
-          <li>Scroll to the bottom &mdash; the <strong>Channel ID</strong> is listed there (starts with <code>C</code>)</li>
-        </ol>
-        <div class="guide-note">Alternative: right-click channel &rarr; <strong>Copy link</strong>. The ID is the last segment of the URL.</div>
-      </div>
-    </details>
-
-    <details class="guide-section">
-      <summary>Booking Link &amp; Calendly token</summary>
-      <div class="guide-section-body">
-        <p><strong>Booking link</strong> &mdash; any scheduler (Calendly, Cal.com, SavvyCal, HubSpot meetings, etc.). The draft always includes this link when it&rsquo;s time to book.</p>
-        <p><strong>Calendly personal access token</strong> (optional) &mdash; only if the booking link is a <code>calendly.com</code> URL. With it, the app pulls <strong>real</strong> open times from Calendly so the AI can suggest two slots that actually exist. Without it (or for non-Calendly links), connect <strong>Google or Outlook</strong> on this client card so we can suggest times from calendar free/busy; otherwise the draft just points them to the link without inventing fake times.</p>
-        <p>Examples:</p>
-        <ul>
-          <li><code>https://calendly.com/acme-ceo/30min</code></li>
-          <li><code>https://cal.com/acme/discovery-call</code></li>
-          <li><code>https://savvycal.com/acme/chat</code></li>
-        </ul>
-      </div>
-    </details>
-
-    <details class="guide-section">
-      <summary>Voice Prompt</summary>
-      <div class="guide-section-body">
-        <p>2&ndash;4 sentences describing how Gemini should write on this client's behalf. Think tone, style, phrases to avoid, how to close.</p>
-        <div class="guide-note"><strong>Example:</strong><br>"Direct, no-fluff tone. Speak like a fellow B2B operator. Never start with 'Great question' or 'Thanks for reaching out'. Keep replies to 2&ndash;3 sentences. Always end with a soft CTA for a 15-min call."</div>
-      </div>
-    </details>
-
-    <div class="guide-category">Meeting Booking Flow</div>
-
-    <details class="guide-section">
-      <summary>How meetings work</summary>
-      <div class="guide-section-body">
-        <p>When a prospect agrees to meet:</p>
-        <ol>
-          <li>AI drafts a short friendly reply</li>
-          <li>If we have <strong>real</strong> availability (Calendly API and/or their connected calendar), the draft offers <strong>those</strong> times plus the booking link</li>
-          <li>The message goes to <strong>Slack</strong> &mdash; someone taps <strong>Approve &amp; send</strong> or <strong>Edit &amp; send</strong> (or Reject)</li>
-          <li>After approval, the reply goes out on SmartLead or HeyReach; optional calendar invite still depends on Google/Outlook being connected</li>
-        </ol>
-        <div class="guide-note">Wrong webhook URL on someone else&rsquo;s campaign? We skip it &mdash; nothing appears in the wrong client&rsquo;s Slack.</div>
-      </div>
-    </details>
-
-    <details class="guide-section">
-      <summary>Getting the client's booking link</summary>
-      <div class="guide-section-body">
-        <p>Ask the client for the URL of their scheduling page. Any platform works:</p>
-        <ul>
-          <li><strong>Calendly</strong> &mdash; e.g. <code>https://calendly.com/jane/30min</code></li>
-          <li><strong>Cal.com</strong> &mdash; e.g. <code>https://cal.com/acme/discovery</code></li>
-          <li><strong>SavvyCal</strong> &mdash; e.g. <code>https://savvycal.com/acme/chat</code></li>
-          <li><strong>HubSpot</strong> &mdash; e.g. <code>https://meetings.hubspot.com/jane</code></li>
-        </ul>
-        <p>The scheduling platform handles calendar conflicts, Zoom/Meet/Teams links, confirmation emails, and reminders &mdash; we just need the URL.</p>
-      </div>
-    </details>
-
-    <div class="guide-category">After Creating the Client</div>
-
-    <details class="guide-section">
-      <summary>Set up webhooks in SmartLead &amp; HeyReach</summary>
-      <div class="guide-section-body">
-        <ol>
-          <li>Click the client card in the dashboard to open its details</li>
-          <li>Copy the <strong>SmartLead Webhook URL</strong> and paste it only on campaigns that belong to <strong>that same</strong> SmartLead API key&rsquo;s account</li>
-          <li>Copy the <strong>HeyReach Webhook URL</strong> and paste it only on campaigns in <strong>that</strong> HeyReach workspace</li>
-          <li>Send a test reply &mdash; you should see a Slack card with Approve / Edit &amp; send / Reject</li>
-        </ol>
-        <div class="guide-note">Optional: set <code>WEBHOOK_TEST_SECRET</code> on the server and use <code>POST /admin/test/slack-draft/&lt;client-id&gt;</code> with header <code>x-webhook-test-secret</code> to post a fake card without a real prospect reply.</div>
-      </div>
-    </details>
-
-    <div class="guide-category">Railway (hosting)</div>
-
-    <details class="guide-section">
-      <summary>Deploy checklist</summary>
-      <div class="guide-section-body">
-        <ol>
-          <li>Connect this repo; Railway sets <code>RAILWAY_PUBLIC_DOMAIN</code> automatically</li>
-          <li>Variables: <code>DATABASE_URL</code>, <code>GEMINI_API_KEY</code>, <code>SLACK_SIGNING_SECRET</code>, optional <code>LEADMAGIC_API_KEY</code>, optional <code>WEBHOOK_TEST_SECRET</code>, optional <code>DEFAULT_BOOKING_TIMEZONE</code></li>
-          <li>Run SQL: <code>schema.sql</code> on a fresh DB, or apply <code>migrations/*.sql</code> in order on an existing one (includes <code>004_calendly_pat.sql</code> for the Calendly token column)</li>
-          <li>Slack app &rarr; Interactivity URL = <code>https://&lt;your-domain&gt;/slack/actions</code></li>
+          <li>Connect the repo; set <code>DATABASE_URL</code>, API keys, <code>SLACK_SIGNING_SECRET</code>, Supabase vars, SMS keys.</li>
+          <li>Apply <code>migrations/*.sql</code> to Railway Postgres as needed.</li>
+          <li>Ensure the public domain <strong>target port</strong> matches the app listen port (often <code>8080</code>).</li>
         </ol>
       </div>
     </details>
@@ -1221,21 +1221,24 @@
   </div>
 </div>
 
-<!-- Client detail (slide-over panel) -->
+<!-- Campaign workspace (slide-over panel) -->
 <div class="panel-overlay" id="detailModal">
   <div class="panel">
     <div class="modal-header">
-      <h3 id="detailTitle">Client Details</h3>
+      <div>
+        <h3 id="detailTitle">Campaign</h3>
+        <p id="detailSubtitle" style="font-size:13px;color:var(--text-muted);font-weight:500;margin-top:6px;line-height:1.35"> </p>
+      </div>
       <div class="modal-header-actions">
-        <button class="modal-guide-btn" id="detailGuideToggleBtn" onclick="toggleGuide()" title="Setup guide">&#9432; Guide</button>
+        <button class="modal-guide-btn" id="detailGuideToggleBtn" onclick="toggleGuide()" title="How it works">&#9432; Help</button>
         <button class="modal-close" onclick="closeModal('detailModal')">&times;</button>
       </div>
     </div>
     <div class="modal-body" id="detailBody"></div>
     <div class="modal-footer">
-      <button class="btn btn-danger btn-sm" id="toggleActiveBtn" onclick="toggleActive()">Deactivate</button>
+      <button class="btn btn-danger btn-sm" id="toggleActiveBtn" onclick="toggleActive()">Pause</button>
       <button class="btn btn-ghost" onclick="closeModal('detailModal')">Close</button>
-      <button class="btn btn-primary" onclick="openEditFromDetail()">Edit</button>
+      <button class="btn btn-primary" onclick="openEditFromDetail()">Edit settings</button>
     </div>
   </div>
 </div>
@@ -1253,31 +1256,30 @@ async function loadClients() {
     renderStats();
     renderGrid();
   } catch (err) {
-    toast('Failed to load clients', 'error');
+    toast('Could not load campaigns', 'error');
   }
 }
 
 function renderStats() {
   const active = clients.filter(c => c.active).length;
-  const withSmartlead = clients.filter(c => c.smartlead_api_key).length;
-  const withHeyreach = clients.filter(c => c.heyreach_api_key).length;
+  const withSlack = clients.filter(c => c.slack_bot_token && c.slack_channel_id).length;
 
   document.getElementById('stats').innerHTML = `
     <div class="stat-card">
-      <div class="label">Total Clients</div>
+      <div class="label">Campaigns</div>
       <div class="value">${clients.length}</div>
     </div>
     <div class="stat-card">
-      <div class="label">Active</div>
+      <div class="label">Running</div>
       <div class="value" style="color: var(--accent-light)">${active}</div>
     </div>
     <div class="stat-card">
-      <div class="label">SmartLead Connected</div>
-      <div class="value">${withSmartlead}</div>
+      <div class="label">Slack wired</div>
+      <div class="value">${withSlack}</div>
     </div>
     <div class="stat-card">
-      <div class="label">HeyReach Connected</div>
-      <div class="value">${withHeyreach}</div>
+      <div class="label">Paused</div>
+      <div class="value">${clients.length - active}</div>
     </div>
   `;
 }
@@ -1288,9 +1290,9 @@ function renderGrid() {
   if (clients.length === 0) {
     grid.innerHTML = `
       <div class="empty-state">
-        <div class="icon">&#128203;</div>
-        <p>No clients yet. Add your first client to get started.</p>
-        <button class="btn btn-primary" onclick="openCreateModal()">+ Add Client</button>
+        <div class="icon">&#128172;</div>
+        <p>No campaigns yet. Create one to build a sequence, upload leads, and send.</p>
+        <button class="btn btn-primary" onclick="openCreateModal()">New campaign</button>
       </div>
     `;
     return;
@@ -1301,25 +1303,39 @@ function renderGrid() {
       <div class="client-card-header">
         <span class="client-name">${esc(c.name)}</span>
         <span class="status-badge ${c.active ? 'status-active' : 'status-inactive'}">
-          ${c.active ? 'Active' : 'Inactive'}
+          ${c.active ? 'Running' : 'Paused'}
         </span>
       </div>
       <div class="client-meta">
-        <span class="${c.smartlead_api_key ? 'key-present' : 'key-missing'}">
-          ${c.smartlead_api_key ? '&#10003;' : '&#10007;'} SmartLead
-        </span>
-        <span class="${c.heyreach_api_key ? 'key-present' : 'key-missing'}">
-          ${c.heyreach_api_key ? '&#10003;' : '&#10007;'} HeyReach
+        <span class="${c.slack_bot_token ? 'key-present' : 'key-missing'}">
+          ${c.slack_bot_token ? '&#10003;' : '&#10007;'} Slack
         </span>
         <span class="${c.booking_link ? 'key-present' : 'key-missing'}">
-          ${c.booking_link ? '&#10003;' : '&#10007;'} Booking Link
+          ${c.booking_link ? '&#10003;' : '&#10007;'} Booking link
         </span>
         <span style="color: var(--text-muted)">
-          Added ${new Date(c.created_at).toLocaleDateString()}
+          Created ${new Date(c.created_at).toLocaleDateString()}
         </span>
       </div>
     </div>
   `).join('');
+}
+
+// ─── Detail tabs ───────────────────────────────────────
+function detailTab(clientId, tab) {
+  const tabs = ['overview', 'sequence', 'leads', 'integrations', 'settings'];
+  tabs.forEach((t) => {
+    const panel = document.getElementById(`detail_tab_${t}_${clientId}`);
+    if (panel) panel.classList.toggle('active', t === tab);
+  });
+  const nav = document.getElementById(`detail_tab_nav_${clientId}`);
+  if (nav) {
+    nav.querySelectorAll('.campaign-tab').forEach((btn) => {
+      const on = btn.getAttribute('data-tab') === tab;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+  }
 }
 
 // ─── Detail ──────────────────────────────────────────
@@ -1329,31 +1345,29 @@ function openDetail(id) {
   currentDetailClient = c;
 
   document.getElementById('detailTitle').textContent = c.name;
-  document.getElementById('toggleActiveBtn').textContent = c.active ? 'Deactivate' : 'Activate';
+  const subEl = document.getElementById('detailSubtitle');
+  if (subEl) {
+    subEl.textContent = (c.active ? 'Running' : 'Paused') + ' · Workspace ID ' + c.id;
+  }
+  document.getElementById('toggleActiveBtn').textContent = c.active ? 'Pause campaign' : 'Resume campaign';
 
   document.getElementById('detailBody').innerHTML = `
-    <div class="detail-section">
-      <h4>Webhook URLs</h4>
-      <div class="webhook-url">
-        <span class="url-text">${esc(c.smartlead_webhook_url)}</span>
-        <button class="copy-btn" onclick="copyText('${esc(c.smartlead_webhook_url)}', this)" title="Copy">&#128203;</button>
+    <div class="panel-detail-head">
+      <div class="campaign-tabs">
+        <div class="campaign-tabs-nav" id="detail_tab_nav_${c.id}" role="tablist" aria-label="Campaign sections">
+          <button type="button" role="tab" class="campaign-tab active" aria-selected="true" data-tab="overview" onclick="detailTab('${c.id}', 'overview')">Overview</button>
+          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="sequence" onclick="detailTab('${c.id}', 'sequence')">Sequence</button>
+          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="leads" onclick="detailTab('${c.id}', 'leads')">Leads &amp; data</button>
+          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="integrations" onclick="detailTab('${c.id}', 'integrations')">Integrations</button>
+          <button type="button" role="tab" class="campaign-tab" aria-selected="false" data-tab="settings" onclick="detailTab('${c.id}', 'settings')">Settings</button>
+        </div>
       </div>
-      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px">Paste into SmartLead campaign webhook settings</div>
-      <div class="webhook-url">
-        <span class="url-text">${esc(c.heyreach_webhook_url)}</span>
-        <button class="copy-btn" onclick="copyText('${esc(c.heyreach_webhook_url)}', this)" title="Copy">&#128203;</button>
-      </div>
-      <div style="font-size:11px; color:var(--text-muted)">Paste into HeyReach campaign webhook settings</div>
-      <div class="webhook-url">
-        <span class="url-text">${esc(c.sms_webhook_url || '')}</span>
-        <button class="copy-btn" onclick="copyText('${esc(c.sms_webhook_url || '')}', this)" title="Copy">&#128203;</button>
-      </div>
-      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px">SMSMobileAPI inbound webhook → this URL</div>
     </div>
 
+    <div id="detail_tab_overview_${c.id}" class="campaign-tab-panel active" role="tabpanel">
     <div class="detail-section">
-      <h4>SMS cockpit</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Preview messages with Supabase prospect variables, see send gaps, and test-send (uses <code>SMSMOBILEAPI_KEY</code>). Configure Supabase env on the server.</p>
+      <h4>Preview &amp; activity</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Merge tags from Supabase prospects, test-send, and review inbound/outbound lines. Needs server env: Supabase + SMS provider.</p>
       <div class="sms-cockpit">
         <div class="sms-cockpit-grid">
           <div>
@@ -1361,41 +1375,42 @@ function openDetail(id) {
             <input type="text" id="sms_preview_phone_${c.id}" placeholder="+15551234567" autocomplete="tel">
           </div>
           <div>
-            <label>Action secret (WEBHOOK_TEST_SECRET)</label>
-            <input type="password" id="sms_action_secret_${c.id}" placeholder="Paste once — stored in this browser" autocomplete="off" onchange="sessionStorage.setItem('sms_action_secret', this.value)">
+            <label>Dashboard secret (<code>WEBHOOK_TEST_SECRET</code>)</label>
+            <input type="password" id="sms_action_secret_${c.id}" placeholder="Stored in this browser for enroll / branch actions" autocomplete="off" onchange="sessionStorage.setItem('sms_action_secret', this.value)">
           </div>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview from Supabase</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="loadSmsPreview('${c.id}')">Load preview</button>
         <div id="sms_preview_out_${c.id}" class="sms-preview-box" style="display:none"></div>
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')">Send preview as SMS</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="sendTestSms('${c.id}')">Send test SMS</button>
         </div>
-        <h4 style="margin-top:16px;font-size:11px;color:var(--text-muted)">Recent SMS log</h4>
+        <h4 style="margin-top:16px;font-size:11px;color:var(--text-muted)">SMS log</h4>
         <div id="sms_log_wrap_${c.id}" class="sms-log-wrap"><div style="opacity:0.5;font-size:12px">Loading…</div></div>
       </div>
     </div>
+    </div>
 
+    <div id="detail_tab_sequence_${c.id}" class="campaign-tab-panel" role="tabpanel">
     <div class="detail-section">
-      <h4>SMS sequences</h4>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
-        Build multi-step outbound SMS: <strong>schedule</strong>, <strong>CSV → Supabase</strong> (<code>sms_prospect</code>), <strong>branching</strong>, and <code>{{placeholders}}</code> from prospect columns + <code>extra</code> JSON. Requires <code>SUPABASE_URL</code> + service role on the server.
-        Inbound messages get <strong>sentiment</strong> (gpt-4.1-nano) in the log; <strong>STOP / unsubscribe</strong> auto-DNCs and cancels queued campaign texts.
+      <h4>Outbound sequence</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.55">
+        Pick or create an <strong>SMS sequence</strong> below (schedule, steps, enroll). Inbound replies get sentiment; STOP unsubscribes and cancels queued texts.
       </p>
       <div class="sms-cockpit sms-campaign-ui">
         <div class="sms-campaign-bar">
           <div>
-            <label>Campaign</label>
+            <label>Sequence</label>
             <select id="sms_cp_select_${c.id}" onchange="smsCpOnSelect('${c.id}')">
               <option value="">— loading —</option>
             </select>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpNewCampaign('${c.id}')">+ New campaign</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpReloadList('${c.id}')">Refresh list</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpNewCampaign('${c.id}')">+ New sequence</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpReloadList('${c.id}')">Refresh</button>
         </div>
         <div id="sms_cp_editor_${c.id}" style="display:none">
           <div class="sms-cp-meta">
             <div>
-              <label>Campaign name</label>
+              <label>Sequence name</label>
               <input type="text" id="sms_cp_name_${c.id}" placeholder="e.g. Cold trade — no site">
             </div>
             <div class="sms-cp-active">
@@ -1426,21 +1441,31 @@ function openDetail(id) {
             <div style="margin-top:10px;font-size:11px;color:var(--text-muted)">Send on weekdays (Luxon: Mon=1 … Sun=7)</div>
             <div id="sms_cp_dow_${c.id}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
             <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--text-muted)">
-              <input type="checkbox" id="sms_cp_exclude_other_${c.id}" checked> Exclude phones already in another <strong>active</strong> campaign
+              <input type="checkbox" id="sms_cp_exclude_other_${c.id}" checked> Exclude phones already in another <strong>active</strong> sequence
             </label>
           </div>
           <div id="sms_cp_steps_${c.id}"></div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Staged leads (CSV upload)</h5>
-          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Writes to Supabase <code>sms_prospect</code>. Extra columns map to <code>extra</code> for <code>{{snake_case}}</code>. Requires a <code>phone</code> column.</p>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+        </div>
+        <div id="sms_cp_empty_${c.id}" style="opacity:0.7;font-size:12px">Select or create a sequence.</div>
+      </div>
+    </div>
+    </div>
+
+    <div id="detail_tab_leads_${c.id}" class="campaign-tab-panel" role="tabpanel">
+    <div class="detail-section">
+      <h4>Lists, enroll &amp; queue</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Select an SMS sequence on the <strong>Sequence</strong> tab first. CSV writes to Supabase <code>sms_prospect</code>; extra columns become <code>{{snake_case}}</code> merge fields.</p>
+      <div class="sms-cockpit" style="margin-top:8px">
+          <h5 style="margin:0 0 6px;font-size:12px;color:var(--text-muted)">Staged CSV</h5>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
             <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
             <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count staged</button>
           </div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Reply branching (this campaign → other)</h5>
-          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">When an inbound SMS is classified, cancel this campaign for that phone and enroll them in the target campaign.</p>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Reply branching</h5>
+          <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">On inbound classification, move the phone to another sequence.</p>
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px">
-            <div><label style="font-size:11px;color:var(--text-muted)">Target campaign</label>
+            <div><label style="font-size:11px;color:var(--text-muted)">Target sequence</label>
               <select id="sms_cp_branch_target_${c.id}" style="min-width:180px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"></select></div>
             <div><label style="font-size:11px;color:var(--text-muted)">When intent is</label>
               <select id="sms_cp_branch_trigger_${c.id}" style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px">
@@ -1452,64 +1477,89 @@ function openDetail(id) {
             <button type="button" class="btn btn-primary btn-sm" onclick="smsCpAddBranch('${c.id}')">Add rule</button>
           </div>
           <div id="sms_cp_transitions_${c.id}" style="font-size:11px;margin-bottom:12px"></div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Lead list (phones)</h5>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Phones to enroll</h5>
           <textarea class="sms-cp-csv" id="sms_cp_phones_${c.id}" placeholder="+15551234567&#10;+15559876543&#10;Or CSV: phone,business_name,city"></textarea>
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpPreview('${c.id}')">Preview for these numbers</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpPreview('${c.id}')">Preview merge</button>
             <button type="button" class="btn btn-primary btn-sm" onclick="smsCpEnroll('${c.id}')">Enroll &amp; send step 1</button>
           </div>
           <div id="sms_cp_preview_${c.id}" class="sms-cp-preview-out" style="display:none"></div>
-          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Queued / recent jobs</h5>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpLoadJobs('${c.id}')">Refresh jobs</button>
+          <h5 style="margin:14px 0 6px;font-size:12px;color:var(--text-muted)">Send queue</h5>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpLoadJobs('${c.id}')">Refresh queue</button>
           <div id="sms_cp_jobs_${c.id}" class="sms-cp-jobs"></div>
-        </div>
-        <div id="sms_cp_empty_${c.id}" style="opacity:0.7;font-size:12px">Select or create a campaign.</div>
       </div>
     </div>
-
     <div class="detail-section">
-      <h4>Supabase — leads &amp; campaign log</h4>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Prospects and DNC flags live in Supabase. Campaign sends enrollments also append to <code>campaign_event_log</code>.</p>
+      <h4>Supabase snapshot</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Recent rows from your Supabase project (<code>sms_prospect</code>, <code>campaign_event_log</code>).</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
         <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadProspects('${c.id}')">Refresh prospects</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Refresh campaign events</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsSupabaseLoadEvents('${c.id}')">Refresh events</button>
       </div>
       <h5 style="font-size:11px;color:var(--text-muted)">Prospects (recent)</h5>
       <div id="sms_sb_prospects_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
       <h5 style="margin-top:12px;font-size:11px;color:var(--text-muted)">Campaign events (recent)</h5>
       <div id="sms_sb_events_${c.id}" class="sms-cp-jobs" style="max-height:220px"></div>
     </div>
+    </div>
 
+    <div id="detail_tab_integrations_${c.id}" class="campaign-tab-panel" role="tabpanel">
     <div class="detail-section">
-      <h4>Credentials</h4>
-      <div class="detail-row">
-        <span class="label">SmartLead API Key</span>
-        <span class="value masked" onclick="toggleMask(this, '${esc(c.smartlead_api_key || '')}')">${mask(c.smartlead_api_key)}</span>
+      <h4>Inbound SMS webhook</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Point your SMS provider (e.g. SMSMobileAPI) at this URL for inbound messages.</p>
+      <div class="webhook-url">
+        <span class="url-text">${esc(c.sms_webhook_url || '')}</span>
+        <button class="copy-btn" onclick="copyText('${esc(c.sms_webhook_url || '')}', this)" title="Copy">&#128203;</button>
       </div>
-      <div class="detail-row">
-        <span class="label">HeyReach API Key</span>
-        <span class="value masked" onclick="toggleMask(this, '${esc(c.heyreach_api_key || '')}')">${mask(c.heyreach_api_key)}</span>
+    </div>
+    <div class="detail-section">
+      <h4>Optional: email &amp; LinkedIn webhooks</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Only if this workspace uses SmartLead or HeyReach for AI reply drafts in Slack. Paste each URL into that tool&rsquo;s webhook settings.</p>
+      <div class="webhook-url">
+        <span class="url-text">${esc(c.smartlead_webhook_url)}</span>
+        <button class="copy-btn" onclick="copyText('${esc(c.smartlead_webhook_url)}', this)" title="Copy">&#128203;</button>
       </div>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px">Email automation tool → webhook URL</div>
+      <div class="webhook-url">
+        <span class="url-text">${esc(c.heyreach_webhook_url)}</span>
+        <button class="copy-btn" onclick="copyText('${esc(c.heyreach_webhook_url)}', this)" title="Copy">&#128203;</button>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px">LinkedIn automation tool → webhook URL</div>
+    </div>
+    <div class="detail-section">
+      <h4>Stored keys (read-only)</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Tap to reveal. Edit from <strong>Edit settings</strong> in the footer.</p>
       <div class="detail-row">
-        <span class="label">Slack Bot Token</span>
+        <span class="label">Slack bot token</span>
         <span class="value masked" onclick="toggleMask(this, '${esc(c.slack_bot_token || '')}')">${mask(c.slack_bot_token)}</span>
       </div>
       <div class="detail-row">
-        <span class="label">Slack Channel ID</span>
+        <span class="label">Slack channel</span>
         <span class="value">${esc(c.slack_channel_id)}</span>
       </div>
       <div class="detail-row">
-        <span class="label">Booking Link</span>
+        <span class="label">Email tool API key</span>
+        <span class="value masked" onclick="toggleMask(this, '${esc(c.smartlead_api_key || '')}')">${mask(c.smartlead_api_key)}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">LinkedIn tool API key</span>
+        <span class="value masked" onclick="toggleMask(this, '${esc(c.heyreach_api_key || '')}')">${mask(c.heyreach_api_key)}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Booking link</span>
         <span class="value">${c.booking_link ? '<a href="' + esc(c.booking_link) + '" target="_blank" style="color:var(--accent-light)">' + esc(c.booking_link) + '</a>' : '—'}</span>
       </div>
       <div class="detail-row">
-        <span class="label">Calendly PAT</span>
+        <span class="label">Calendly token</span>
         <span class="value masked" onclick="toggleMask(this, '${esc(c.calendly_personal_access_token || '')}')">${mask(c.calendly_personal_access_token)}</span>
       </div>
     </div>
+    </div>
 
+    <div id="detail_tab_settings_${c.id}" class="campaign-tab-panel" role="tabpanel">
     <div class="detail-section">
-      <h4>Calendar Connection</h4>
+      <h4>Calendar</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Optional — used when AI suggests meeting times for email/LinkedIn threads.</p>
       <div id="calendarStatus_${c.id}" style="font-size:13px; color:var(--text-muted)">Loading...</div>
       <div style="display:flex; gap:8px; margin-top:10px">
         <button class="btn btn-ghost btn-sm" onclick="connectCalendar('${c.id}', 'microsoft')">Connect Outlook</button>
@@ -1518,14 +1568,15 @@ function openDetail(id) {
     </div>
 
     <div class="detail-section">
-      <h4>Voice Prompt</h4>
-      <div style="font-size:13px; color:var(--text-muted); white-space:pre-wrap">${esc(c.voice_prompt || 'No voice prompt set.')}</div>
+      <h4>Voice prompt</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Tone for AI replies on email/LinkedIn (not SMS sequence bodies).</p>
+      <div style="font-size:13px; color:var(--text-muted); white-space:pre-wrap">${esc(c.voice_prompt || 'None set.')}</div>
     </div>
 
     <div class="detail-section">
-      <h4>Info</h4>
+      <h4>Workspace</h4>
       <div class="detail-row">
-        <span class="label">Client ID</span>
+        <span class="label">ID</span>
         <span class="value" style="font-family:monospace; font-size:12px">${c.id}</span>
       </div>
       <div class="detail-row">
@@ -1533,9 +1584,10 @@ function openDetail(id) {
         <span class="value">${new Date(c.created_at).toLocaleString()}</span>
       </div>
       <div class="detail-row">
-        <span class="label">Last Updated</span>
+        <span class="label">Updated</span>
         <span class="value">${new Date(c.updated_at).toLocaleString()}</span>
       </div>
+    </div>
     </div>
   `;
 
@@ -1560,18 +1612,18 @@ async function toggleActive() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: newState }),
     });
-    toast(`Client ${newState ? 'activated' : 'deactivated'}`, 'success');
+    toast(`Campaign ${newState ? 'resumed' : 'paused'}`, 'success');
     closeModal('detailModal');
     loadClients();
   } catch (err) {
-    toast('Failed to update client', 'error');
+    toast('Could not update campaign state', 'error');
   }
 }
 
 // ─── Create / Edit ───────────────────────────────────
 function openCreateModal() {
-  document.getElementById('formTitle').textContent = 'Add Client';
-  document.getElementById('formSubmitBtn').textContent = 'Create Client';
+  document.getElementById('formTitle').textContent = 'New campaign';
+  document.getElementById('formSubmitBtn').textContent = 'Create campaign';
   document.getElementById('editClientId').value = '';
   clearForm();
   openModal('formModal');
@@ -1582,8 +1634,8 @@ function openEditFromDetail() {
   if (!c) return;
   closeModal('detailModal');
 
-  document.getElementById('formTitle').textContent = 'Edit Client';
-  document.getElementById('formSubmitBtn').textContent = 'Save Changes';
+  document.getElementById('formTitle').textContent = 'Edit campaign settings';
+  document.getElementById('formSubmitBtn').textContent = 'Save';
   document.getElementById('editClientId').value = c.id;
   document.getElementById('f_name').value = c.name || '';
   document.getElementById('f_smartlead_api_key').value = c.smartlead_api_key || '';
@@ -1597,6 +1649,9 @@ function openEditFromDetail() {
   document.getElementById('f_sms_free_site_body').value = c.sms_free_site_body || '';
   document.getElementById('f_sms_free_site_delay_ms').value = (c.sms_free_site_delay_ms != null ? c.sms_free_site_delay_ms : 20000);
   document.getElementById('f_sms_min_gap_between_texts_ms').value = (c.sms_min_gap_between_texts_ms != null ? c.sms_min_gap_between_texts_ms : 60000);
+
+  const opt = document.getElementById('optionalIntegrations');
+  if (opt) opt.open = !!(c.smartlead_api_key || c.heyreach_api_key);
 
   openModal('formModal');
 }
@@ -1619,7 +1674,7 @@ async function submitForm() {
   };
 
   if (!data.name || !data.slack_bot_token || !data.slack_channel_id) {
-    toast('Name, Slack Bot Token, and Slack Channel ID are required', 'error');
+    toast('Campaign name, Slack bot token, and Slack channel ID are required', 'error');
     return;
   }
 
@@ -1639,7 +1694,7 @@ async function submitForm() {
       throw new Error(err.error || 'Request failed');
     }
 
-    toast(isEdit ? 'Client updated' : 'Client created', 'success');
+    toast(isEdit ? 'Campaign updated' : 'Campaign created', 'success');
     closeModal('formModal');
     loadClients();
   } catch (err) {
@@ -1894,7 +1949,7 @@ async function smsCpDeleteBranch(clientId, sourceId, triggerIntent) {
 
 async function smsCpUploadCsv(clientId) {
   const secret = smsCpGetSecret(clientId);
-  if (!secret) { toast('Enter action secret', 'error'); return; }
+  if (!secret) { toast('Enter dashboard secret on Overview', 'error'); return; }
   const input = document.getElementById(`sms_cp_csv_file_${clientId}`);
   const file = input && input.files && input.files[0];
   if (!file) { toast('Choose a CSV file', 'error'); return; }
@@ -2042,9 +2097,9 @@ function smsCpCollectSteps(clientId) {
 
 async function smsCpNewCampaign(clientId) {
   const secret = smsCpGetSecret(clientId);
-  if (!secret) { toast('Enter action secret first', 'error'); return; }
+  if (!secret) { toast('Enter dashboard secret on Overview first', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
-  const name = (window.prompt('Campaign name?', 'Outbound sequence') || '').trim() || 'Outbound sequence';
+  const name = (window.prompt('Sequence name?', 'Outbound sequence') || '').trim() || 'Outbound sequence';
   try {
     const res = await fetch(`${API}/admin/sms/campaign/${clientId}`, {
       method: 'POST',
@@ -2068,7 +2123,8 @@ async function smsCpNewCampaign(clientId) {
       body: JSON.stringify({ steps }),
     });
     await smsCpLoadCampaign(clientId, row.id);
-    toast('Campaign created', 'success');
+    detailTab(clientId, 'sequence');
+    toast('Sequence created', 'success');
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -2077,9 +2133,9 @@ async function smsCpNewCampaign(clientId) {
 async function smsCpSaveMeta(clientId) {
   const secret = smsCpGetSecret(clientId);
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!secret || !id) { toast('Select a campaign and enter secret', 'error'); return; }
+  if (!secret || !id) { toast('Pick a sequence on the Sequence tab and enter your dashboard secret', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
-  const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Campaign';
+  const name = document.getElementById(`sms_cp_name_${clientId}`).value.trim() || 'Sequence';
   const active = document.getElementById(`sms_cp_active_${clientId}`).checked;
   const payload = {
     name,
@@ -2112,7 +2168,7 @@ async function smsCpSaveMeta(clientId) {
 async function smsCpSaveSteps(clientId) {
   const secret = smsCpGetSecret(clientId);
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!secret || !id) { toast('Select a campaign and enter secret', 'error'); return; }
+  if (!secret || !id) { toast('Pick a sequence on the Sequence tab and enter your dashboard secret', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
   const steps = smsCpCollectSteps(clientId);
   try {
@@ -2142,7 +2198,7 @@ function smsCpParsePhones(text) {
 
 async function smsCpPreview(clientId) {
   const id = smsCpEnsureStore(clientId).campaignId;
-  if (!id) { toast('Select a campaign', 'error'); return; }
+  if (!id) { toast('Select a sequence first', 'error'); return; }
   const phones = smsCpParsePhones(document.getElementById(`sms_cp_phones_${clientId}`).value);
   if (!phones.length) { toast('Enter at least one phone', 'error'); return; }
   const out = document.getElementById(`sms_cp_preview_${clientId}`);
@@ -2222,7 +2278,7 @@ async function sendTestSms(clientId) {
   const phone = document.getElementById(`sms_preview_phone_${clientId}`)?.value?.trim();
   const secret = document.getElementById(`sms_action_secret_${clientId}`)?.value?.trim() || sessionStorage.getItem('sms_action_secret');
   if (!phone) { toast('Enter phone', 'error'); return; }
-  if (!secret) { toast('Enter WEBHOOK_TEST_SECRET (action secret)', 'error'); return; }
+  if (!secret) { toast('Enter WEBHOOK_TEST_SECRET on Overview', 'error'); return; }
   sessionStorage.setItem('sms_action_secret', secret);
   let body = (window._smsPreview && window._smsPreview[clientId] && window._smsPreview[clientId].rendered) || '';
   if (!body) {
