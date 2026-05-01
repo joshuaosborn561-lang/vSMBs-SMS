@@ -402,50 +402,120 @@ async function appendDnc(clientId, rawPhone, reason) {
   });
 }
 
-async function upsertManyFromCsvRows(clientId, rows) {
-  let upserted = 0;
+const BULK_UPSERT_CHUNK = 500;
+
+function csvRowToProspectPayload(clientId, obj, supabaseHasNormalizedName) {
+  const rawPhone = String(obj.phone || obj.phone_e164 || '').trim();
+  if (!rawPhone) return null;
+  const phone_e164 = canonicalPhoneForProspect(rawPhone);
+  if (!phone_e164) return null;
+
+  const extra = { ...obj };
+  delete extra.phone;
+  delete extra.phone_e164;
+  delete extra.business_name;
+  delete extra.normalized_name;
+  delete extra.vertical;
+  delete extra.city;
+  delete extra.sent_status;
+  delete extra.reply;
+  delete extra.intent;
+  delete extra.site_url;
+  delete extra.customer_status;
+
+  if (obj.upload_source != null && obj.upload_source !== '') {
+    extra.upload_source = obj.upload_source;
+  }
+  if (!supabaseHasNormalizedName && obj.normalized_name != null && obj.normalized_name !== '') {
+    extra.normalized_name = obj.normalized_name;
+  }
+
+  const now = new Date().toISOString();
+  return {
+    client_id: clientId,
+    phone_e164,
+    business_name: obj.business_name != null ? obj.business_name : null,
+    normalized_name: supabaseHasNormalizedName ? (obj.normalized_name != null ? obj.normalized_name : null) : null,
+    vertical: obj.vertical != null ? obj.vertical : null,
+    city: obj.city != null ? obj.city : null,
+    sent_status: obj.sent_status != null ? obj.sent_status : null,
+    reply: obj.reply != null ? obj.reply : null,
+    intent: obj.intent != null ? obj.intent : null,
+    site_url: obj.site_url != null ? obj.site_url : null,
+    customer_status: obj.customer_status != null ? obj.customer_status : null,
+    is_dnc: false,
+    extra,
+    updated_at: now,
+  };
+}
+
+/**
+ * Bulk upsert for CSV import — batched PostgREST upserts (50k+ rows), deduped by canonical phone (last row wins).
+ */
+async function upsertManyFromCsvRows(clientId, rows, options = {}) {
+  const uploadLabel = options.upload_source;
+  const sb = requireSupabase();
   const supabaseHasNormalizedName = await hasNormalizedNameColumn();
+
+  const byPhone = new Map();
   for (const obj of rows) {
-    const phone = String(obj.phone || obj.phone_e164 || '').trim();
-    if (!phone) continue;
-    const extra = { ...obj };
-    delete extra.phone;
-    delete extra.phone_e164;
-    delete extra.business_name;
-    delete extra.normalized_name;
-    delete extra.vertical;
-    delete extra.city;
-    delete extra.sent_status;
-    delete extra.reply;
-    delete extra.intent;
-    delete extra.site_url;
-    delete extra.customer_status;
+    const raw =
+      uploadLabel != null && uploadLabel !== ''
+        ? { ...obj, upload_source: obj.upload_source || uploadLabel }
+        : { ...obj };
+    const payload = csvRowToProspectPayload(clientId, raw, supabaseHasNormalizedName);
+    if (!payload) continue;
+    byPhone.set(payload.phone_e164, payload);
+  }
 
-    if (obj.upload_source != null && obj.upload_source !== '') {
-      extra.upload_source = obj.upload_source;
-    }
-    // If Supabase doesn't have normalized_name yet, fall back to extra so
-    // {{normalized_name}} still resolves at render time.
-    if (!supabaseHasNormalizedName && obj.normalized_name != null && obj.normalized_name !== '') {
-      extra.normalized_name = obj.normalized_name;
-    }
-
-    await upsertProspect(clientId, {
-      phone_e164: phone,
-      business_name: obj.business_name,
-      normalized_name: supabaseHasNormalizedName ? obj.normalized_name : undefined,
-      vertical: obj.vertical,
-      city: obj.city,
-      sent_status: obj.sent_status,
-      reply: obj.reply,
-      intent: obj.intent,
-      site_url: obj.site_url,
-      customer_status: obj.customer_status,
-      extra,
-    });
-    upserted += 1;
+  const payloads = [...byPhone.values()];
+  let upserted = 0;
+  for (let i = 0; i < payloads.length; i += BULK_UPSERT_CHUNK) {
+    const chunk = payloads.slice(i, i + BULK_UPSERT_CHUNK);
+    const { error } = await sb
+      .from('sms_prospect')
+      .upsert(chunk, { onConflict: 'client_id,phone_e164' });
+    if (error) throw new Error(error.message);
+    upserted += chunk.length;
   }
   return upserted;
+}
+
+const DELETE_CHUNK = 500;
+
+async function deleteAllProspectsForClient(clientId) {
+  const sb = requireSupabase();
+  let deleted = 0;
+  for (;;) {
+    const { data, error } = await sb
+      .from('sms_prospect')
+      .select('id')
+      .eq('client_id', clientId)
+      .limit(DELETE_CHUNK);
+    if (error) throw new Error(error.message);
+    const ids = (data || []).map((r) => r.id);
+    if (!ids.length) break;
+    const { error: delErr } = await sb.from('sms_prospect').delete().in('id', ids);
+    if (delErr) throw new Error(delErr.message);
+    deleted += ids.length;
+  }
+  return deleted;
+}
+
+/** Delete every row in sms_prospect (table schema unchanged). Use with care. */
+async function deleteAllProspectsGlobally() {
+  const sb = requireSupabase();
+  let deleted = 0;
+  for (;;) {
+    const { data, error } = await sb.from('sms_prospect').select('id').limit(DELETE_CHUNK);
+    if (error) throw new Error(error.message);
+    const ids = (data || []).map((r) => r.id);
+    if (!ids.length) break;
+    const { error: delErr } = await sb.from('sms_prospect').delete().in('id', ids);
+    if (delErr) throw new Error(delErr.message);
+    deleted += ids.length;
+  }
+  return deleted;
 }
 
 let _normalizedNameColumnCache = null;
@@ -545,6 +615,8 @@ module.exports = {
   patchOrCreateProspect,
   appendDnc,
   upsertManyFromCsvRows,
+  deleteAllProspectsForClient,
+  deleteAllProspectsGlobally,
   listProspects,
   listProspectsPage,
   listProspectPhoneNumbers,

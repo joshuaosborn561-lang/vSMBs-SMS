@@ -489,13 +489,18 @@ async function deleteTransition(clientId, sourceCampaignId, triggerIntent) {
 
 async function importStagedLeads(clientId, rows, sourceLabel) {
   await assertClient(clientId);
-  const enriched = sourceLabel
-    ? rows.map((r) => ({ ...r, upload_source: sourceLabel }))
-    : rows;
-  const csv_rows = enriched.length;
-  const imported = await prospects.upsertManyFromCsvRows(clientId, enriched);
+  const csv_rows = rows.length;
+  const imported = await prospects.upsertManyFromCsvRows(clientId, rows, {
+    upload_source: sourceLabel || undefined,
+  });
   const total_contacts = await prospects.countProspects(clientId).catch(() => null);
-  return { imported, csv_rows, total_contacts };
+  return {
+    imported,
+    csv_rows,
+    /** Rows with a valid phone after canonicalization / dedupe within file */
+    unique_phones_upserted: imported,
+    total_contacts,
+  };
 }
 
 async function listStagedLeads(clientId, limit = 500) {

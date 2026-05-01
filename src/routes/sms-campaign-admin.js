@@ -3,13 +3,14 @@ const multer = require('multer');
 const smsCampaign = require('../services/sms-campaign');
 const prospects = require('../services/prospects');
 const { listCampaignEvents } = require('../services/campaign-log');
+const { parseCsvToLeadRows } = require('../utils/csv-leads');
 
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  // CSV lead lists can be large; keep in-memory but allow a bigger cap.
+  // CSV lead lists can be large (50k+ rows); keep in-memory but allow a bigger cap.
   // If this cap is hit, we return JSON via the error handler below.
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: 80 * 1024 * 1024 },
 });
 
 const { dashboardSecretOk } = require('../utils/dashboard-secret');
@@ -17,7 +18,7 @@ const { dashboardSecretOk } = require('../utils/dashboard-secret');
 function jsonMulterError(err, _req, res, next) {
   if (!err) return next();
   if (err && err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ error: 'CSV too large (max 25MB)' });
+    return res.status(413).json({ error: 'CSV too large (max 80MB)' });
   }
   return res.status(400).json({ error: err.message || 'Upload failed' });
 }
@@ -215,51 +216,8 @@ router.post('/admin/sms/staged-leads/:clientId/csv', upload.single('file'), json
   try {
     const buf = req.file?.buffer;
     if (!buf || !buf.length) return res.status(400).json({ error: 'file required (multipart field: file)' });
-    const text = buf.toString('utf8');
-    const lines = text.split(/\r?\n/).filter((l) => l.trim());
-    if (!lines.length) return res.json({ imported: 0 });
-
-    const rawHeader = lines[0].split(',').map((s) => s.trim().replace(/^"|"$/g, '').toLowerCase());
-    const hasHeader = rawHeader.some((h) => h === 'phone' || h === 'phone_number' || h === 'mobile');
-    const headerRow = hasHeader ? rawHeader : null;
-    const dataLines = hasHeader ? lines.slice(1) : lines;
-
-    const normKey = (k) => String(k || '').trim().toLowerCase().replace(/\s+/g, '_');
-
-    const rows = [];
-    for (const line of dataLines) {
-      const cells = [];
-      let cur = '';
-      let inQ = false;
-      for (let i = 0; i < line.length; i += 1) {
-        const ch = line[i];
-        if (ch === '"') inQ = !inQ;
-        else if (ch === ',' && !inQ) {
-          cells.push(cur.trim());
-          cur = '';
-        } else cur += ch;
-      }
-      cells.push(cur.trim());
-
-      let phoneIdx = 0;
-      if (headerRow) {
-        phoneIdx = headerRow.findIndex((h) => h === 'phone' || h === 'phone_number' || h === 'mobile');
-        if (phoneIdx < 0) phoneIdx = 0;
-      }
-      const phone = cells[phoneIdx] ? cells[phoneIdx].replace(/^"|"$/g, '').trim() : '';
-      if (!phone) continue;
-
-      const obj = { phone };
-      if (headerRow) {
-        headerRow.forEach((h, i) => {
-          if (i === phoneIdx) return;
-          const k = normKey(h);
-          if (!k) return;
-          if (cells[i] != null && cells[i] !== '') obj[k] = cells[i].replace(/^"|"$/g, '').trim();
-        });
-      }
-      rows.push(obj);
-    }
+    const { rows, csv_rows } = parseCsvToLeadRows(buf);
+    if (!csv_rows) return res.json({ imported: 0, csv_rows: 0, unique_phones_upserted: 0, total_contacts: 0 });
 
     const out = await smsCampaign.importStagedLeads(
       req.params.clientId,
@@ -270,6 +228,64 @@ router.post('/admin/sms/staged-leads/:clientId/csv', upload.single('file'), json
   } catch (err) {
     console.error('[SMS Campaign] csv import', err.message);
     res.status(400).json({ error: err.message });
+  }
+});
+
+/** Replace all contacts for this campaign with CSV contents (same parser as upload). */
+router.post('/admin/sms/staged-leads/:clientId/csv-replace', upload.single('file'), jsonMulterError, async (req, res) => {
+  if (!dashboardSecretOk(req)) {
+    return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
+  }
+  try {
+    const clientId = req.params.clientId;
+    const buf = req.file?.buffer;
+    if (!buf || !buf.length) return res.status(400).json({ error: 'file required (multipart field: file)' });
+    const deleted = await prospects.deleteAllProspectsForClient(clientId);
+    const { rows, csv_rows } = parseCsvToLeadRows(buf);
+    if (!csv_rows) {
+      const total_contacts = await prospects.countProspects(clientId).catch(() => 0);
+      return res.json({
+        replaced: true,
+        deleted,
+        imported: 0,
+        csv_rows: 0,
+        unique_phones_upserted: 0,
+        total_contacts,
+      });
+    }
+    const out = await smsCampaign.importStagedLeads(clientId, rows, req.query.source_label || '');
+    res.json({ replaced: true, deleted, ...out });
+  } catch (err) {
+    console.error('[SMS Campaign] csv replace', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/** Delete all sms_prospect rows for this campaign (Supabase). */
+router.delete('/admin/sms/prospects/:clientId/all', async (req, res) => {
+  if (!dashboardSecretOk(req)) {
+    return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
+  }
+  try {
+    const deleted = await prospects.deleteAllProspectsForClient(req.params.clientId);
+    res.json({ ok: true, deleted });
+  } catch (err) {
+    console.error('[SMS Campaign] delete prospects', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Delete every row in sms_prospect (global wipe — table schema unchanged). */
+router.delete('/admin/sms/prospects-all', async (req, res) => {
+  if (!dashboardSecretOk(req)) {
+    return res.status(401).json({ error: 'Missing or invalid x-dashboard-secret' });
+  }
+  try {
+    const deleted = await prospects.deleteAllProspectsGlobally();
+    res.json({ ok: true, deleted });
+  } catch (err) {
+    console.error('[SMS Campaign] delete all prospects', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

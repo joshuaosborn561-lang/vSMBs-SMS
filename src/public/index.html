@@ -971,6 +971,7 @@
 
     .toast.success { border-color: var(--green); }
     .toast.error { border-color: var(--red); }
+    .toast.info { border-color: var(--accent-light); color: var(--text); }
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
@@ -1475,6 +1476,7 @@ function renderGrid() {
             </span>
           </div>
           <div class="campaign-card-meta">
+            <span style="font-weight:700;color:var(--accent);font-size:14px">${Number(c.counts?.staged_leads ?? 0).toLocaleString()} leads</span>
             <span class="${c.slack_bot_token ? 'key-present' : 'key-missing'}">
               ${c.slack_bot_token ? '&#10003;' : '&#10007;'} Slack
             </span>
@@ -1541,7 +1543,8 @@ async function openDetail(id) {
   const isArchived = !!c.archived_at;
   const subEl = document.getElementById('detailSubtitle');
   if (subEl) {
-    subEl.textContent = `${(c.status || 'draft').toUpperCase()}${isArchived ? ' · ARCHIVED' : ''} · ID ${c.id} · Leads ${c.counts?.staged_leads ?? 0}`;
+    const nl = Number(c.counts?.staged_leads ?? 0).toLocaleString();
+    subEl.textContent = `${(c.status || 'draft').toUpperCase()}${isArchived ? ' · ARCHIVED' : ''} · ${nl} leads · ID ${c.id}`;
   }
   document.getElementById('toggleActiveBtn').textContent = c.status === 'live' ? 'Pause campaign' : 'Resume campaign';
 
@@ -1562,9 +1565,11 @@ async function openDetail(id) {
       <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Upload your CSV here. Each row becomes a contact in your list (stored in Supabase). Column headers like <code>business_name</code> or <code>normalized_name</code> turn into merge fields you can use in step 2 as <code>{{business_name}}</code>.</p>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:20px">
         <input type="file" id="sms_cp_csv_file_${c.id}" accept=".csv,text/csv">
-        <button type="button" class="btn btn-primary btn-sm" onclick="smsCpUploadCsv('${c.id}')">Upload CSV</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count leads in list</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="smsCpUploadCsv('${c.id}', false)">Add / merge CSV</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpUploadCsv('${c.id}', true)" title="Remove existing contacts for this campaign, then import this file">Replace list</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="smsCpStagedCount('${c.id}')">Count leads</button>
       </div>
+      <p style="font-size:11px;color:var(--text-muted);margin:-12px 0 14px">Large files (50k+ rows) may take a minute — wait for the success message. Phone column: <code>phone</code>. Duplicate numbers merge into one contact.</p>
       <p style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">When you are ready to send to everyone on the list, use <strong>Launch campaign</strong> in the footer (after you write your texts in step 2).</p>
 
       <h4 style="margin-top:20px;margin-bottom:6px;font-size:14px">Preview leads</h4>
@@ -2334,14 +2339,18 @@ async function smsCpDeleteBranch(clientId, sourceId, triggerIntent) {
   }
 }
 
-async function smsCpUploadCsv(clientId) {
+async function smsCpUploadCsv(clientId, replaceList) {
   const input = document.getElementById(`sms_cp_csv_file_${clientId}`);
   const file = input && input.files && input.files[0];
   if (!file) { toast('Choose a CSV file', 'error'); return; }
   const fd = new FormData();
   fd.append('file', file);
+  const path = replaceList
+    ? `${API}/admin/sms/staged-leads/${clientId}/csv-replace?source_label=dashboard`
+    : `${API}/admin/sms/staged-leads/${clientId}/csv?source_label=dashboard`;
   try {
-    const res = await fetch(`${API}/admin/sms/staged-leads/${clientId}/csv?source_label=dashboard`, {
+    toast(replaceList ? 'Replacing list — large CSVs can take a few minutes…' : 'Uploading — large CSVs can take a few minutes…', 'info');
+    const res = await fetch(path, {
       method: 'POST',
       headers: dashHeaders(),
       body: fd,
@@ -2350,22 +2359,42 @@ async function smsCpUploadCsv(clientId) {
     if (!res.ok) throw new Error(j.error || 'Upload failed');
     const tc = j.total_contacts != null ? j.total_contacts : '';
     const cr = j.csv_rows != null ? j.csv_rows : '';
-    if (cr && tc !== '' && Number(cr) !== Number(tc)) {
-      toast(`CSV: ${cr} row(s) with phone · ${tc} unique contact(s) in Supabase (same number = one row).`, 'success');
-    } else {
-      toast(
-        tc !== ''
-          ? `Imported ${j.imported} row(s) · ${tc} contact(s) in this campaign`
-          : `Imported ${j.imported} row(s) (Supabase)`,
-        'success'
-      );
+    const up = j.unique_phones_upserted != null ? j.unique_phones_upserted : j.imported;
+    let msg = '';
+    if (replaceList && j.deleted != null) {
+      msg = `Removed ${Number(j.deleted).toLocaleString()} old row(s). `;
     }
+    if (cr && tc !== '' && Number(cr) !== Number(tc)) {
+      msg += `CSV ${Number(cr).toLocaleString()} data row(s) · ${Number(up).toLocaleString()} unique phone(s) written · ${Number(tc).toLocaleString()} total in campaign (dup phones = one row).`;
+    } else {
+      msg += `${Number(up).toLocaleString()} contact row(s) written · ${tc !== '' ? Number(tc).toLocaleString() + ' total in campaign' : 'done'}`;
+    }
+    toast(msg, 'success');
+    await refreshCampaignSnapshot(clientId);
     smsLeadsPreviewLoad(clientId, true);
     await loadVariableSuggestions(clientId);
     input.value = '';
   } catch (e) {
     toast(e.message, 'error');
   }
+}
+
+async function refreshCampaignSnapshot(clientId) {
+  try {
+    const res = await fetch(`${API}/admin/campaigns/${clientId}`);
+    const j = await res.json();
+    if (!res.ok || !j.id) return;
+    clients = clients.map((x) => (x.id === j.id ? j : x));
+    if (currentDetailClient && currentDetailClient.id === j.id) currentDetailClient = j;
+    const subEl = document.getElementById('detailSubtitle');
+    if (subEl && currentDetailClient && currentDetailClient.id === clientId) {
+      const nl = Number(j.counts?.staged_leads ?? 0).toLocaleString();
+      const arch = j.archived_at ? ' · ARCHIVED' : '';
+      subEl.textContent = `${(j.status || 'draft').toUpperCase()}${arch} · ${nl} leads · ID ${j.id}`;
+    }
+    renderStats();
+    renderGrid();
+  } catch (e) {}
 }
 
 async function smsCpStagedCount(clientId) {
@@ -2976,7 +3005,8 @@ function toast(msg, type = 'success') {
   el.className = `toast ${type}`;
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  const ms = type === 'info' ? 6000 : 4000;
+  setTimeout(() => el.remove(), ms);
 }
 
 // Close modals / panels on overlay click

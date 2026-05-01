@@ -14,7 +14,8 @@
     "railway:vars": "node scripts/list-railway-service-vars.mjs",
     "railway:deploy": "node scripts/trigger-railway-deploy.mjs",
     "railway:status": "node scripts/railway-deployment-status.mjs",
-    "railway:sync-domain-port": "node scripts/railway-sync-service-domain-port.mjs"
+    "railway:sync-domain-port": "node scripts/railway-sync-service-domain-port.mjs",
+    "supabase:wipe-prospects": "node scripts/wipe-supabase-prospects.mjs --all"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
