@@ -139,6 +139,24 @@
       padding-left: 12px;
     }
 
+    .campaign-scope-toggle {
+      display: flex;
+      gap: 4px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      background: var(--surface-2);
+    }
+    .campaign-scope-toggle .campaign-scope-btn {
+      border: 1px solid transparent;
+    }
+    .campaign-scope-toggle .campaign-scope-btn.active {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
     .sidebar-footer {
       margin-top: auto;
       font-size: 11px;
@@ -1188,8 +1206,12 @@
       <div class="main-content">
         <div class="stats" id="stats"></div>
 
-        <div class="toolbar">
-          <h2>All campaigns</h2>
+        <div class="toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:4px">
+          <h2 id="campaignListHeading" style="margin:0">All campaigns</h2>
+          <div class="campaign-scope-toggle" role="group" aria-label="Campaign list scope">
+            <button type="button" class="btn btn-ghost btn-sm campaign-scope-btn active" id="scopeBtnActive" onclick="setCampaignListScope('active')">Active</button>
+            <button type="button" class="btn btn-ghost btn-sm campaign-scope-btn" id="scopeBtnArchived" onclick="setCampaignListScope('archived')">Archived</button>
+          </div>
         </div>
 
         <div class="campaign-grid" id="campaignGrid"></div>
@@ -1298,13 +1320,14 @@
       </div>
     </div>
     <div class="modal-body" id="detailBody"></div>
-    <div class="modal-footer">
-      <button class="btn btn-danger btn-sm" onclick="deleteCampaignFromDetail()">Delete</button>
-      <button class="btn btn-danger btn-sm" id="toggleActiveBtn" onclick="toggleActive()">Pause</button>
-      <button class="btn btn-ghost" onclick="closeModal('detailModal')">Close</button>
-      <button class="btn btn-ghost" onclick="saveCampaignFromPanel(true)">Save draft</button>
-      <button class="btn btn-ghost" onclick="saveCampaignFromPanel(false)">Save</button>
-      <button class="btn btn-primary" onclick="launchCampaignFromPanel()">Launch campaign</button>
+    <div class="modal-footer" id="campaignModalFooter">
+      <button type="button" class="btn btn-danger btn-sm" id="footerBtnDelete" onclick="deleteCampaignFromDetail()">Delete</button>
+      <button type="button" class="btn btn-danger btn-sm" id="toggleActiveBtn" onclick="toggleActive()">Pause</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal('detailModal')">Close</button>
+      <button type="button" class="btn btn-ghost" id="footerBtnSaveDraft" onclick="saveCampaignFromPanel(true)">Save draft</button>
+      <button type="button" class="btn btn-ghost" id="footerBtnSave" onclick="saveCampaignFromPanel(false)">Save</button>
+      <button type="button" class="btn btn-primary" id="footerBtnLaunch" onclick="launchCampaignFromPanel()">Launch campaign</button>
+      <button type="button" class="btn btn-primary" id="footerBtnRestore" style="display:none" onclick="restoreCampaignFromDetail()">Restore from archive</button>
     </div>
   </div>
 </div>
@@ -1313,6 +1336,8 @@
 const API = window.location.origin;
 let clients = [];
 let currentDetailClient = null;
+/** 'active' | 'archived' */
+let campaignListScope = 'active';
 
 function setAppView(view) {
   const camp = document.getElementById('mainViewCampaigns');
@@ -1344,10 +1369,24 @@ function isCampaignDraft(c) {
   return String(c.status || '').toLowerCase() === 'draft';
 }
 
+function setCampaignListScope(scope) {
+  campaignListScope = scope === 'archived' ? 'archived' : 'active';
+  const a = document.getElementById('scopeBtnActive');
+  const z = document.getElementById('scopeBtnArchived');
+  const h = document.getElementById('campaignListHeading');
+  if (a && z) {
+    a.classList.toggle('active', campaignListScope === 'active');
+    z.classList.toggle('active', campaignListScope === 'archived');
+  }
+  if (h) h.textContent = campaignListScope === 'archived' ? 'Archived campaigns' : 'All campaigns';
+  loadClients();
+}
+
 // ─── Load ────────────────────────────────────────────
 async function loadClients() {
   try {
-    const res = await fetch(`${API}/admin/campaigns`);
+    const q = campaignListScope === 'archived' ? '?scope=archived' : '?scope=active';
+    const res = await fetch(`${API}/admin/campaigns${q}`);
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Failed');
     clients = j.campaigns || [];
@@ -1359,11 +1398,27 @@ async function loadClients() {
 }
 
 function renderStats() {
+  const statsEl = document.getElementById('stats');
+  if (!statsEl) return;
+
+  if (campaignListScope === 'archived') {
+    statsEl.innerHTML = `
+    <div class="stat-card">
+      <div class="label">Archived</div>
+      <div class="value">${clients.length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Tip</div>
+      <div class="value" style="font-size:13px;font-weight:500;line-height:1.35;color:var(--text-muted)">Open a campaign and click <strong>Restore from archive</strong> to edit or send again.</div>
+    </div>`;
+    return;
+  }
+
   const live = clients.filter(c => c.status === 'live').length;
   const drafts = clients.filter(c => c.status === 'draft').length;
   const paused = clients.filter(c => c.status === 'paused').length;
 
-  document.getElementById('stats').innerHTML = `
+  statsEl.innerHTML = `
     <div class="stat-card">
       <div class="label">Campaigns</div>
       <div class="value">${clients.length}</div>
@@ -1387,16 +1442,26 @@ function renderGrid() {
   const grid = document.getElementById('campaignGrid');
 
   if (clients.length === 0) {
-    grid.innerHTML = `
+    if (campaignListScope === 'archived') {
+      grid.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">&#128193;</div>
+        <p>No archived campaigns. Deleted campaigns appear here.</p>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="setCampaignListScope('active')">Back to active list</button>
+      </div>`;
+    } else {
+      grid.innerHTML = `
       <div class="empty-state">
         <div class="icon">&#128172;</div>
         <p>No campaigns yet. Create one to build a sequence, upload leads, and send.</p>
         <button class="btn btn-primary" onclick="openCreateCampaign()">New campaign</button>
       </div>
     `;
+    }
     return;
   }
 
+  const archived = campaignListScope === 'archived';
   grid.innerHTML = clients.map(c => {
     const draft = c.status === 'draft';
     return `
@@ -1404,7 +1469,7 @@ function renderGrid() {
       <div class="campaign-card-row">
         <div class="campaign-card-main" onclick="openDetail('${c.id}')">
           <div class="campaign-card-header">
-            <span class="campaign-card-title">${esc(c.name)}${draft ? '<span class="badge-draft">Draft</span>' : ''}</span>
+            <span class="campaign-card-title">${esc(c.name)}${draft ? '<span class="badge-draft">Draft</span>' : ''}${archived ? '<span class="badge-draft" style="margin-left:6px">Archived</span>' : ''}</span>
             <span class="status-badge ${c.status === 'live' ? 'status-active' : 'status-inactive'}">
               ${esc((c.status || 'draft').toUpperCase())}
             </span>
@@ -1419,7 +1484,9 @@ function renderGrid() {
           </div>
         </div>
         <div class="campaign-card-actions">
-          <button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();deleteCampaignPrompt('${c.id}')" title="Delete campaign">&#128465;</button>
+          ${archived
+      ? `<button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation();restoreCampaignPrompt('${c.id}')" title="Restore campaign">Restore</button>`
+      : `<button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();deleteCampaignPrompt('${c.id}')" title="Archive campaign">&#128465;</button>`}
         </div>
       </div>
     </div>`;
@@ -1471,9 +1538,10 @@ async function openDetail(id) {
   } catch (e) {}
 
   document.getElementById('detailTitle').textContent = c.name;
+  const isArchived = !!c.archived_at;
   const subEl = document.getElementById('detailSubtitle');
   if (subEl) {
-    subEl.textContent = `${(c.status || 'draft').toUpperCase()} · ID ${c.id} · Leads ${c.counts?.staged_leads ?? 0}`;
+    subEl.textContent = `${(c.status || 'draft').toUpperCase()}${isArchived ? ' · ARCHIVED' : ''} · ID ${c.id} · Leads ${c.counts?.staged_leads ?? 0}`;
   }
   document.getElementById('toggleActiveBtn').textContent = c.status === 'live' ? 'Pause campaign' : 'Resume campaign';
 
@@ -1698,6 +1766,57 @@ async function openDetail(id) {
   smsCpRenderDow(c.id, c.sequence?.schedule_days || [1,2,3,4,5]);
   await loadVariableSuggestions(c.id);
   smsCpRenderSteps(c.id, (c.sequence && c.sequence.steps && c.sequence.steps.length) ? c.sequence.steps : [{ body_template: '(Draft — write your first SMS for {{business_name}})', delay_after_ms: 86400000 }]);
+  applyArchivedPanelMode(!!c.archived_at);
+}
+
+function applyArchivedPanelMode(isArchived) {
+  const delBtn = document.getElementById('footerBtnDelete');
+  const pauseBtn = document.getElementById('toggleActiveBtn');
+  const draftBtn = document.getElementById('footerBtnSaveDraft');
+  const saveBtn = document.getElementById('footerBtnSave');
+  const launchBtn = document.getElementById('footerBtnLaunch');
+  const restoreBtn = document.getElementById('footerBtnRestore');
+  const hdrSave = document.querySelector('#detailModal .panel-header-save');
+  if (pauseBtn) pauseBtn.style.display = isArchived ? 'none' : '';
+  if (delBtn) delBtn.style.display = isArchived ? 'none' : '';
+  if (draftBtn) draftBtn.style.display = isArchived ? 'none' : '';
+  if (saveBtn) saveBtn.style.display = isArchived ? 'none' : '';
+  if (launchBtn) launchBtn.style.display = isArchived ? 'none' : '';
+  if (restoreBtn) restoreBtn.style.display = isArchived ? '' : 'none';
+  if (hdrSave) hdrSave.style.display = isArchived ? 'none' : '';
+}
+
+async function restoreCampaignFromDetail() {
+  const c = currentDetailClient;
+  if (!c || !c.archived_at) return;
+  await restoreCampaignPrompt(c.id, { keepOpen: true });
+}
+
+async function restoreCampaignPrompt(clientId, opts) {
+  const keepOpen = !!(opts && opts.keepOpen);
+  if (!confirm('Restore this campaign to the active list? You can edit and send again (starts paused).')) return;
+  try {
+    const res = await fetch(`${API}/admin/campaigns/${clientId}/restore`, { method: 'POST' });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'Restore failed');
+    currentDetailClient = j.campaign || currentDetailClient;
+    clients = clients.map((x) => (x.id === clientId ? (j.campaign || x) : x));
+    toast('Campaign restored — open it from Active to edit.', 'success');
+    campaignListScope = 'active';
+    const a = document.getElementById('scopeBtnActive');
+    const z = document.getElementById('scopeBtnArchived');
+    const h = document.getElementById('campaignListHeading');
+    if (a && z) {
+      a.classList.add('active');
+      z.classList.remove('active');
+    }
+    if (h) h.textContent = 'All campaigns';
+    await loadClients();
+    if (!keepOpen) closeModal('detailModal');
+    else await openDetail(clientId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
 async function toggleActive() {
@@ -1850,7 +1969,7 @@ async function loadMasterInbox() {
 }
 
 async function deleteCampaignPrompt(clientId) {
-  if (!confirm('Archive this campaign? It will disappear from the dashboard and stop sending.')) return;
+  if (!confirm('Archive this campaign? You can open it again under Archived.')) return;
   try {
     const res = await fetch(`${API}/admin/campaigns/${clientId}`, { method: 'DELETE' });
     if (!res.ok) {
@@ -2800,6 +2919,7 @@ function openModal(id) {
 function closeModal(id) {
   document.getElementById(id).classList.remove('active');
   if (id === 'detailModal') {
+    applyArchivedPanelMode(false);
     const drawer = document.getElementById('guideDrawer');
     if (drawer.classList.contains('active')) {
       closeGuide();

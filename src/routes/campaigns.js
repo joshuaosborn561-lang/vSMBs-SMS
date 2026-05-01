@@ -11,6 +11,8 @@
  *  - POST   /admin/campaigns/:clientId/pause              pause sends
  *  - POST   /admin/campaigns/:clientId/resume             resume sends
  *  - DELETE /admin/campaigns/:clientId                    archive (soft-delete)
+ *  - POST   /admin/campaigns/:clientId/restore            un-archive
+ *  - GET    /admin/campaigns?scope=active|archived|all     list (default: active)
  *  - GET    /admin/campaigns/:clientId/variables          merged variable suggestions for the inserter
  */
 const { Router } = require('express');
@@ -183,11 +185,14 @@ function applyClientPatch(input) {
 
 router.get('/admin/campaigns', async (req, res) => {
   try {
-    const { rows } = await db.query(
-      `SELECT id FROM clients
-       WHERE archived_at IS NULL
-       ORDER BY created_at DESC`
-    );
+    const scope = String(req.query.scope || 'active').toLowerCase();
+    let sql = `SELECT id FROM clients`;
+    if (scope === 'archived') sql += ` WHERE archived_at IS NOT NULL`;
+    else if (scope === 'all') sql += ``;
+    else sql += ` WHERE archived_at IS NULL`;
+    sql += ` ORDER BY created_at DESC`;
+
+    const { rows } = await db.query(sql);
     const out = [];
     for (const row of rows) {
       const full = await loadFullCampaign(row.id);
@@ -250,6 +255,16 @@ router.patch('/admin/campaigns/:clientId', async (req, res) => {
   try {
     await c.query('BEGIN');
 
+    const { rows: [archCheck] } = await c.query(`SELECT archived_at FROM clients WHERE id = $1`, [clientId]);
+    if (!archCheck) {
+      await c.query('ROLLBACK').catch(() => {});
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    if (archCheck.archived_at) {
+      await c.query('ROLLBACK').catch(() => {});
+      return res.status(400).json({ error: 'Campaign is archived — restore it before editing' });
+    }
+
     // 1) Workspace fields
     const workspace = body.workspace && typeof body.workspace === 'object' ? body.workspace : {};
     const { updates, values } = applyClientPatch(workspace);
@@ -305,6 +320,9 @@ router.post('/admin/campaigns/:clientId/launch', async (req, res) => {
   try {
     const full = await loadFullCampaign(clientId);
     if (!full) return res.status(404).json({ error: 'Campaign not found' });
+    if (full.archived_at) {
+      return res.status(400).json({ error: 'Restore this campaign from the archive before launching' });
+    }
     if (!full.sequence) return res.status(400).json({ error: 'Sequence is missing' });
 
     // Validate at least one real step body
@@ -337,6 +355,9 @@ router.post('/admin/campaigns/:clientId/launch', async (req, res) => {
 router.post('/admin/campaigns/:clientId/pause', async (req, res) => {
   const { clientId } = req.params;
   try {
+    const { rows: [cl] } = await db.query(`SELECT archived_at FROM clients WHERE id = $1`, [clientId]);
+    if (!cl) return res.status(404).json({ error: 'Campaign not found' });
+    if (cl.archived_at) return res.status(400).json({ error: 'Campaign is archived' });
     await db.query(`UPDATE clients SET active = false, updated_at = now() WHERE id = $1`, [clientId]);
     await db.query(
       `UPDATE sms_campaign SET active = false, status = 'paused', updated_at = now()
@@ -352,6 +373,9 @@ router.post('/admin/campaigns/:clientId/pause', async (req, res) => {
 router.post('/admin/campaigns/:clientId/resume', async (req, res) => {
   const { clientId } = req.params;
   try {
+    const { rows: [cl] } = await db.query(`SELECT archived_at FROM clients WHERE id = $1`, [clientId]);
+    if (!cl) return res.status(404).json({ error: 'Campaign not found' });
+    if (cl.archived_at) return res.status(400).json({ error: 'Campaign is archived' });
     await db.query(`UPDATE clients SET active = true, updated_at = now() WHERE id = $1`, [clientId]);
     await db.query(
       `UPDATE sms_campaign SET active = true, status = 'active', updated_at = now()
@@ -361,6 +385,38 @@ router.post('/admin/campaigns/:clientId/resume', async (req, res) => {
     res.json({ ok: true, campaign: await loadFullCampaign(clientId) });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/campaigns/:clientId/restore', async (req, res) => {
+  const { clientId } = req.params;
+  const c = await db.connect();
+  try {
+    await c.query('BEGIN');
+    const { rows: [row] } = await c.query(`SELECT archived_at FROM clients WHERE id = $1`, [clientId]);
+    if (!row) {
+      await c.query('ROLLBACK');
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    if (!row.archived_at) {
+      await c.query('ROLLBACK');
+      return res.status(400).json({ error: 'Campaign is not archived' });
+    }
+    await c.query(`UPDATE clients SET archived_at = NULL, active = false, updated_at = now() WHERE id = $1`, [clientId]);
+    await c.query(
+      `UPDATE sms_campaign SET active = false, status = 'paused', updated_at = now()
+       WHERE client_id = $1`,
+      [clientId]
+    );
+    await c.query('COMMIT');
+    const full = await loadFullCampaign(clientId);
+    res.json({ ok: true, campaign: full });
+  } catch (err) {
+    await c.query('ROLLBACK').catch(() => {});
+    console.error('[Campaigns] restore', err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    c.release();
   }
 });
 
